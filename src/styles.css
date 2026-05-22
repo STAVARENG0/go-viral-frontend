@@ -769,3 +769,159 @@ label {
 .logItem.sent_text_fallback {
   border-color: rgba(230,0,0,.22);
 }
+
+/* Cliente: login/cadastro por e-mail */
+.clientLoginCard {
+  max-width: 560px;
+}
+
+.clientAuthForm {
+  text-align: left;
+}
+
+.inlineFields {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.checkLine {
+  display: flex;
+  align-items: flex-start;
+  grid-template-columns: auto 1fr;
+  gap: 10px;
+  font-weight: 700;
+  color: var(--muted);
+  line-height: 1.35;
+}
+
+.checkLine input {
+  width: auto;
+  margin-top: 3px;
+}
+
+.checkLine a,
+.legalSmall a,
+.legalCards a {
+  color: var(--red);
+  font-weight: 900;
+}
+
+.legalSmall {
+  color: var(--muted);
+  line-height: 1.45;
+  text-align: center;
+}
+
+.codeNotice {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  border: 1px solid rgba(230,0,0,.18);
+  background: rgba(230,0,0,.055);
+  border-radius: 18px;
+  padding: 14px;
+  color: #111;
+}
+
+.codeInput {
+  text-align: center;
+  font-size: 28px;
+  letter-spacing: .32em;
+  font-weight: 900;
+}
+
+.optionSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 0 12px;
+}
+
+.optionSummary small {
+  color: var(--muted);
+  font-weight: 800;
+}
+
+.addOptionCard {
+  border-style: dashed;
+}
+
+.optionEditorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.iconGhost,
+.iconAction {
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  color: #111;
+  background: #fff;
+  border: 1px solid rgba(17,17,17,.12);
+  box-shadow: none;
+}
+
+.ruleActions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+
+.dangerText {
+  background: rgba(230,0,0,.10);
+  color: var(--red);
+  border: 1px solid rgba(230,0,0,.24);
+  box-shadow: none;
+}
+
+.accountPanel .formGrid {
+  margin-bottom: 18px;
+}
+
+.legalCards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.legalCards a {
+  display: grid;
+  place-items: center;
+  min-height: 58px;
+  border: 1px solid rgba(230,0,0,.20);
+  background: rgba(230,0,0,.055);
+  border-radius: 18px;
+  text-align: center;
+}
+
+.deletionBox {
+  border: 1px solid rgba(17,17,17,.11);
+  background: rgba(255,255,255,.72);
+  border-radius: 22px;
+  padding: 16px;
+  display: grid;
+  gap: 12px;
+}
+
+.deletionBox h3 {
+  margin-bottom: 0;
+}
+
+@media (max-width: 640px) {
+  .inlineFields,
+  .legalCards {
+    grid-template-columns: 1fr;
+  }
+
+  .rule {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+}

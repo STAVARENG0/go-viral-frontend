@@ -7,25 +7,32 @@ import {
   Bot,
   CheckCircle2,
   Clock3,
+  Edit3,
   Instagram,
-  KeyRound,
   Link as LinkIcon,
   Loader2,
   LogOut,
+  Mail,
   MessageCircle,
+  Plus,
   PlugZap,
   RefreshCw,
+  Save,
   Send,
+  Settings,
   ShieldCheck,
   Sparkles,
   Trash2,
+  User,
   UserPlus,
   Wand2,
+  X,
   XCircle,
   Zap
 } from 'lucide-react';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.matheus-caetano.com').replace(/\/$/, '');
+const MAX_OPTIONS = 7;
 
 const triggerTemplates = [
   {
@@ -33,74 +40,36 @@ const triggerTemplates = [
     icon: UserPlus,
     title: 'Novo seguidor',
     keyword: 'novo seguidor',
-    message: 'Bem-vindo(a)! Que bom ter você aqui. Quer descobrir o melhor caminho para começar?',
-    description: 'Modelo pronto para receber quem acabou de seguir o perfil.',
+    message: 'Bem-vindo(a)! Que bom ter você aqui. Escolha uma opção abaixo para continuar. 🚀',
+    description: 'Receba automaticamente quem acabou de seguir o perfil.',
     strategy: 'Receber o novo seguidor com uma mensagem leve, criar conexão rápida e levar a pessoa para uma oferta, diagnóstico ou conversa inicial.'
   },
   {
     id: 'dm_keyword',
     icon: Send,
-    title: 'Chamou no direct',
+    title: 'Direct',
     keyword: 'oi',
     message: 'Oi! Eu sou o assistente da Go Viral. Escolha uma opção abaixo para eu te ajudar agora. 🚀',
-    description: 'Quando a pessoa chama no direct, o fluxo responde.',
+    description: 'Responda quando a pessoa chamar no direct ou enviar uma palavra-chave.',
     strategy: 'Identificar a intenção da pessoa no direct, oferecer opções simples e encaminhar para atendimento, venda ou conteúdo.'
   },
   {
     id: 'comment_keyword',
     icon: MessageCircle,
-    title: 'Comentou palavra-chave',
+    title: 'Comentário',
     keyword: 'quero',
     message: 'Perfeito! Aqui está o próximo passo. Escolha uma opção abaixo para continuar. 🔥',
-    description: 'Quando a pessoa comenta uma palavra-chave, ela recebe a automação.',
+    description: 'Transforme comentário com palavra-chave em conversa privada.',
     strategy: 'Transformar comentário em conversa privada, entregar o link prometido e continuar a jornada no direct.'
   }
 ];
 
-const optionTemplatesByTrigger = {
-  new_follower: [
-    {
-      label: 'Quero conhecer melhor 🚀',
-      response: 'Perfeito! Me conta qual é seu principal objetivo hoje: vender mais, captar leads ou automatizar atendimento?'
-    },
-    {
-      label: 'Ver oferta especial',
-      response: 'Boa! Vou te mandar o link da oferta especial. Depois me chama aqui se quiser ajuda para escolher o melhor caminho.'
-    },
-    {
-      label: 'Falar com humano',
-      response: 'Claro! Me envie seu nome e o melhor horário para atendimento.'
-    }
-  ],
-  dm_keyword: [
-    {
-      label: 'Quero automatizar meu Instagram 🚀',
-      response: 'Perfeito! A Go Viral automatiza atendimento, comentários e directs. Me envie seu objetivo principal: vender, captar lead ou suporte?'
-    },
-    {
-      label: 'Ver planos e valores',
-      response: 'Temos opções para começar simples e escalar. Me diga quantas mensagens você recebe por dia para eu indicar o melhor plano.'
-    },
-    {
-      label: 'Falar com humano',
-      response: 'Claro! Já vou te direcionar. Envie seu nome e melhor horário para atendimento.'
-    }
-  ],
-  comment_keyword: [
-    {
-      label: 'Acessar agora',
-      response: 'Aqui está o acesso que você pediu. Se tiver dúvida, me responde aqui que eu te ajudo.'
-    },
-    {
-      label: 'Receber diagnóstico grátis',
-      response: 'Ótimo! Me mande seu @ do Instagram e eu analiso onde sua automação pode segurar mais clientes.'
-    },
-    {
-      label: 'Quero falar com alguém',
-      response: 'Combinado! Me envie seu nome e melhor horário para atendimento.'
-    }
-  ]
-};
+function defaultOption() {
+  return {
+    label: 'Nova opção',
+    response: 'Digite aqui a resposta automática desta opção.'
+  };
+}
 
 function createFormFromTemplate(template = triggerTemplates[0]) {
   return {
@@ -113,7 +82,8 @@ function createFormFromTemplate(template = triggerTemplates[0]) {
     linkUrl: '',
     publicationMode: 'all',
     publicationUrl: '',
-    options: optionTemplatesByTrigger[template.id].slice(0, 3)
+    active: true,
+    options: [defaultOption()]
   };
 }
 
@@ -195,16 +165,293 @@ function InstagramAvatar({ account }) {
   );
 }
 
+function AuthScreen({ loading, onAuthenticated }) {
+  const [step, setStep] = useState('form');
+  const [form, setForm] = useState({
+    firstName: '',
+    lastName: '',
+    email: '',
+    code: '',
+    termsAccepted: false,
+    privacyAccepted: false
+  });
+  const [sending, setSending] = useState(false);
+
+  function update(field, value) {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  async function apiFetch(path, options = {}) {
+    const res = await fetch(`${API_BASE}${path}`, {
+      ...options,
+      credentials: 'include',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(options.headers || {})
+      }
+    });
+
+    const data = await res.json().catch(() => ({}));
+
+    if (!res.ok) throw new Error(data.error || 'Erro na solicitação.');
+    return data;
+  }
+
+  async function requestCode(e) {
+    e.preventDefault();
+    setSending(true);
+
+    try {
+      await apiFetch('/api/auth/request-code', {
+        method: 'POST',
+        body: JSON.stringify({
+          firstName: form.firstName,
+          lastName: form.lastName,
+          email: form.email,
+          termsAccepted: form.termsAccepted,
+          privacyAccepted: form.privacyAccepted
+        })
+      });
+
+      setStep('code');
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function verifyCode(e) {
+    e.preventDefault();
+    setSending(true);
+
+    try {
+      const data = await apiFetch('/api/auth/verify-code', {
+        method: 'POST',
+        body: JSON.stringify({ email: form.email, code: form.code })
+      });
+
+      onAuthenticated(data.user);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  return (
+    <main className="loginPage">
+      <section className="loginCard glassCard clientLoginCard">
+        <img src="/logo.png" alt="Instagram Go Viral" className="logo" />
+
+        <h1>Go Viral</h1>
+        <p className="loginSubline">Automação para Instagram</p>
+        <p>Painel privado para criar automações que seguram o cliente no direct.</p>
+
+        {step === 'form' ? (
+          <form onSubmit={requestCode} className="stack clientAuthForm">
+            <div className="inlineFields">
+              <label>
+                Nome
+                <input
+                  value={form.firstName}
+                  onChange={(e) => update('firstName', e.target.value)}
+                  placeholder="Seu nome"
+                  autoComplete="given-name"
+                />
+              </label>
+
+              <label>
+                Sobrenome
+                <input
+                  value={form.lastName}
+                  onChange={(e) => update('lastName', e.target.value)}
+                  placeholder="Seu sobrenome"
+                  autoComplete="family-name"
+                />
+              </label>
+            </div>
+
+            <label>
+              E-mail
+              <input
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                placeholder="voce@email.com"
+                type="email"
+                autoComplete="email"
+              />
+            </label>
+
+            <label className="checkLine">
+              <input
+                type="checkbox"
+                checked={form.termsAccepted}
+                onChange={(e) => update('termsAccepted', e.target.checked)}
+              />
+              <span>
+                Aceito os <a href={`${API_BASE}/terms`} target="_blank" rel="noreferrer">Termos de Uso</a>.
+              </span>
+            </label>
+
+            <label className="checkLine">
+              <input
+                type="checkbox"
+                checked={form.privacyAccepted}
+                onChange={(e) => update('privacyAccepted', e.target.checked)}
+              />
+              <span>
+                Aceito a <a href={`${API_BASE}/privacy`} target="_blank" rel="noreferrer">Política de Privacidade</a>.
+              </span>
+            </label>
+
+            <button disabled={sending || loading}>
+              {sending ? <Loader2 className="spin" size={18} /> : <Mail size={18} />}
+              Enviar código por e-mail
+            </button>
+
+            <small className="legalSmall">
+              Ao continuar, você autoriza o uso dos dados informados para criação da conta, autenticação e operação da ferramenta.
+            </small>
+          </form>
+        ) : (
+          <form onSubmit={verifyCode} className="stack clientAuthForm">
+            <div className="codeNotice">
+              <CheckCircle2 size={18} />
+              Enviamos um código para <strong>{form.email}</strong>.
+            </div>
+
+            <label>
+              Código de confirmação
+              <input
+                value={form.code}
+                onChange={(e) => update('code', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                className="codeInput"
+              />
+            </label>
+
+            <button disabled={sending || form.code.length !== 6}>
+              {sending ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
+              Confirmar e entrar
+            </button>
+
+            <button type="button" className="ghost" onClick={() => setStep('form')} disabled={sending}>
+              Voltar
+            </button>
+          </form>
+        )}
+      </section>
+    </main>
+  );
+}
+
+function AccountSettings({ user, loading, apiFetch, onUserUpdated }) {
+  const [firstName, setFirstName] = useState(user?.first_name || user?.firstName || '');
+  const [lastName, setLastName] = useState(user?.last_name || user?.lastName || '');
+  const [note, setNote] = useState('');
+
+  useEffect(() => {
+    setFirstName(user?.first_name || user?.firstName || '');
+    setLastName(user?.last_name || user?.lastName || '');
+  }, [user?.id]);
+
+  async function saveAccount(e) {
+    e.preventDefault();
+
+    try {
+      const data = await apiFetch('/api/account', {
+        method: 'PATCH',
+        body: JSON.stringify({ firstName, lastName })
+      });
+
+      onUserUpdated(data.user);
+      alert('Conta atualizada.');
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  async function requestDeletion() {
+    if (!confirm('Registrar solicitação de exclusão de dados desta conta?')) return;
+
+    try {
+      await apiFetch('/api/account/delete-request', {
+        method: 'POST',
+        body: JSON.stringify({ note })
+      });
+
+      setNote('');
+      alert('Solicitação registrada.');
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  return (
+    <section className="panel accountPanel" id="configuracoes">
+      <div className="panelHeader">
+        <div>
+          <h2><Settings size={20} /> Configurações da conta</h2>
+          <p>Gerencie seus dados básicos, termos e privacidade.</p>
+        </div>
+      </div>
+
+      <form className="formGrid" onSubmit={saveAccount}>
+        <label>
+          Nome
+          <input value={firstName} onChange={(e) => setFirstName(e.target.value)} />
+        </label>
+
+        <label>
+          Sobrenome
+          <input value={lastName} onChange={(e) => setLastName(e.target.value)} />
+        </label>
+
+        <label className="wide">
+          E-mail
+          <input value={user?.email || ''} disabled />
+        </label>
+
+        <button className="wide" disabled={loading}>
+          <Save size={18} /> Salvar dados da conta
+        </button>
+      </form>
+
+      <div className="legalCards">
+        <a href={`${API_BASE}/terms`} target="_blank" rel="noreferrer">Termos de Uso</a>
+        <a href={`${API_BASE}/privacy`} target="_blank" rel="noreferrer">Política de Privacidade</a>
+        <a href={`${API_BASE}/data-deletion`} target="_blank" rel="noreferrer">Exclusão de Dados</a>
+      </div>
+
+      <div className="deletionBox">
+        <h3>Solicitar exclusão de dados</h3>
+        <p>Use esta opção para registrar uma solicitação formal de exclusão de conta e dados conectados.</p>
+        <textarea
+          value={note}
+          onChange={(e) => setNote(e.target.value)}
+          placeholder="Opcional: explique o motivo ou o dado que deseja remover."
+        />
+        <button className="dangerText" onClick={requestDeletion} disabled={loading}>
+          <Trash2 size={18} /> Solicitar exclusão
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const cameFromInstagram = window.location.search.includes('connected=instagram');
 
-  const [pin, setPin] = useState('');
   const [user, setUser] = useState(null);
   const [checkingSession, setCheckingSession] = useState(true);
   const [rules, setRules] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [logs, setLogs] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [editingRuleId, setEditingRuleId] = useState(null);
   const [form, setForm] = useState(createFormFromTemplate());
 
   const selectedTemplate = useMemo(
@@ -212,7 +459,6 @@ function App() {
     [form.triggerType]
   );
 
-  const availableOptions = optionTemplatesByTrigger[form.triggerType] || [];
   const mainAccount = accounts[0] || null;
   const activeRules = rules.filter((rule) => rule.active !== 0 && rule.active !== false);
 
@@ -246,25 +492,6 @@ function App() {
     }
   }
 
-  async function login(e) {
-    e.preventDefault();
-    setLoading(true);
-
-    try {
-      const data = await apiFetch('/api/login', {
-        method: 'POST',
-        body: JSON.stringify({ pin })
-      });
-
-      setUser(data.user);
-      setPin('');
-    } catch (err) {
-      alert(err.message);
-    } finally {
-      setLoading(false);
-    }
-  }
-
   async function loadData() {
     if (!user) return;
 
@@ -282,13 +509,28 @@ function App() {
       setLogs(Array.isArray(logsData) ? logsData : []);
     } catch (err) {
       console.error(err);
-      alert('Erro ao carregar dados do painel.');
+      if (/sessão|unauthorized|expirada/i.test(err.message)) {
+        setUser(null);
+        alert('Sua sessão expirou. Entre novamente.');
+      } else {
+        alert('Erro ao carregar dados do painel.');
+      }
     } finally {
       setLoading(false);
     }
   }
 
-  async function createRule() {
+  function cleanOptions(options) {
+    return (options || [])
+      .slice(0, MAX_OPTIONS)
+      .map((option) => ({
+        label: String(option.label || '').trim(),
+        response: String(option.response || '').trim()
+      }))
+      .filter((option) => option.label && option.response);
+  }
+
+  async function saveRule() {
     setLoading(true);
 
     try {
@@ -302,14 +544,23 @@ function App() {
         linkUrl: form.linkUrl,
         publicationMode: form.publicationMode,
         publicationUrl: form.publicationUrl,
-        options: form.options
+        active: form.active,
+        options: cleanOptions(form.options)
       };
 
-      await apiFetch('/api/rules', {
-        method: 'POST',
-        body: JSON.stringify(payload)
-      });
+      if (editingRuleId) {
+        await apiFetch(`/api/rules/${editingRuleId}`, {
+          method: 'PATCH',
+          body: JSON.stringify(payload)
+        });
+      } else {
+        await apiFetch('/api/rules', {
+          method: 'POST',
+          body: JSON.stringify(payload)
+        });
+      }
 
+      setEditingRuleId(null);
       setForm(createFormFromTemplate(selectedTemplate));
       await loadData();
     } catch (err) {
@@ -317,6 +568,27 @@ function App() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function editRule(rule) {
+    const template = triggerTemplates.find((item) => item.id === (rule.triggerType || rule.trigger_type)) || triggerTemplates[0];
+
+    setEditingRuleId(rule.id);
+    setForm({
+      triggerType: rule.triggerType || rule.trigger_type || template.id,
+      title: rule.title || template.title,
+      strategy: rule.strategy || template.strategy,
+      keyword: rule.keyword || template.keyword,
+      message: rule.message || template.message,
+      linkLabel: rule.linkLabel || rule.link_label || '',
+      linkUrl: rule.linkUrl || rule.link_url || '',
+      publicationMode: rule.publicationMode || rule.publication_mode || 'all',
+      publicationUrl: rule.publicationUrl || rule.publication_url || '',
+      active: rule.active !== 0 && rule.active !== false,
+      options: Array.isArray(rule.options) && rule.options.length ? rule.options.slice(0, MAX_OPTIONS) : [defaultOption()]
+    });
+
+    window.location.hash = '#caminho';
   }
 
   async function deleteRule(id) {
@@ -328,6 +600,11 @@ function App() {
       await apiFetch(`/api/rules/${id}`, {
         method: 'DELETE'
       });
+
+      if (editingRuleId === id) {
+        setEditingRuleId(null);
+        setForm(createFormFromTemplate(selectedTemplate));
+      }
 
       await loadData();
     } catch (err) {
@@ -400,25 +677,14 @@ function App() {
     }
 
     setUser(null);
-    setPin('');
     setRules([]);
     setAccounts([]);
     setLogs([]);
   }
 
   function pickTrigger(template) {
+    setEditingRuleId(null);
     setForm(createFormFromTemplate(template));
-  }
-
-  function toggleOption(option) {
-    const exists = form.options.some((item) => item.label === option.label);
-
-    setForm((prev) => ({
-      ...prev,
-      options: exists
-        ? prev.options.filter((item) => item.label !== option.label)
-        : [...prev.options, { ...option }].slice(0, 3)
-    }));
   }
 
   function updateOption(index, field, value) {
@@ -428,6 +694,25 @@ function App() {
         optionIndex === index ? { ...option, [field]: value } : option
       )
     }));
+  }
+
+  function addOption() {
+    setForm((prev) => {
+      if (prev.options.length >= MAX_OPTIONS) return prev;
+      return { ...prev, options: [...prev.options, defaultOption()] };
+    });
+  }
+
+  function removeOption(index) {
+    setForm((prev) => ({
+      ...prev,
+      options: prev.options.filter((_, optionIndex) => optionIndex !== index)
+    }));
+  }
+
+  function cancelEdit() {
+    setEditingRuleId(null);
+    setForm(createFormFromTemplate(selectedTemplate));
   }
 
   useEffect(() => {
@@ -460,32 +745,7 @@ function App() {
   }
 
   if (!user) {
-    return (
-      <main className="loginPage">
-        <section className="loginCard glassCard">
-          <img src="/logo.png" alt="Instagram Go Viral" className="logo" />
-
-          <h1>Go Viral</h1>
-          <p className="loginSubline">Automação para Instagram</p>
-
-          <p>Painel privado para criar caminhos automáticos que seguram o cliente no direct.</p>
-
-          <form onSubmit={login} className="stack">
-            <input
-              value={pin}
-              onChange={(e) => setPin(e.target.value)}
-              placeholder="PIN de acesso"
-              type="password"
-            />
-
-            <button disabled={loading}>
-              {loading ? <Loader2 className="spin" size={18} /> : <KeyRound size={18} />}
-              Entrar
-            </button>
-          </form>
-        </section>
-      </main>
-    );
+    return <AuthScreen loading={loading} onAuthenticated={setUser} />;
   }
 
   return (
@@ -518,6 +778,10 @@ function App() {
 
           <a className="menuItem" href="#logs">
             <Activity size={15} /> Registro de atividades
+          </a>
+
+          <a className="menuItem" href="#configuracoes">
+            <Settings size={15} /> Configurações da conta
           </a>
 
           <button className="menuItem logoutMenu" onClick={logout}>
@@ -560,7 +824,7 @@ function App() {
             <h2>Automação para Instagram no estilo Go Viral.</h2>
 
             <p>
-              Monte fluxos com opções prontas para comentário, direct e seguidores.
+              Monte fluxos com opções editáveis para comentário, direct e seguidores.
               A prévia mostra como a conversa aparece para o cliente.
             </p>
           </div>
@@ -610,8 +874,14 @@ function App() {
               <h2>
                 <Wand2 size={20} /> Caminho mental da automação
               </h2>
-              <p>Escolha o gatilho, edite a estratégia e salve o fluxo.</p>
+              <p>{editingRuleId ? 'Editando automação existente.' : 'Escolha o gatilho, edite a estratégia e salve o fluxo.'}</p>
             </div>
+
+            {editingRuleId && (
+              <button className="small ghost" onClick={cancelEdit} disabled={loading}>
+                <X size={16} /> Cancelar edição
+              </button>
+            )}
           </div>
 
           <div className="pathGrid">
@@ -650,23 +920,16 @@ function App() {
                 />
               </label>
 
-              <div className="templateList">
-                {availableOptions.map((option) => {
-                  const active = form.options.some((item) => item.label === option.label);
-
-                  return (
-                    <button
-                      key={option.label}
-                      className={active ? 'templateCard active option' : 'templateCard option'}
-                      onClick={() => toggleOption(option)}
-                    >
-                      <CheckCircle2 size={18} />
-                      <strong>{option.label}</strong>
-                      <small>{option.response}</small>
-                    </button>
-                  );
-                })}
+              <div className="optionSummary">
+                <strong>Opções de resposta</strong>
+                <small>{form.options.length}/{MAX_OPTIONS} opções criadas</small>
               </div>
+
+              <button className="templateCard addOptionCard" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}>
+                <Plus size={18} />
+                <strong>Adicionar nova opção</strong>
+                <small>Crie botões personalizados para o cliente clicar no direct.</small>
+              </button>
             </div>
 
             <div className="pathColumn previewColumn">
@@ -684,8 +947,8 @@ function App() {
 
                   {form.linkUrl && <button>{form.linkLabel || 'Acessar agora'}</button>}
 
-                  {form.options.map((option) => (
-                    <button key={option.label}>{option.label}</button>
+                  {form.options.map((option, index) => (
+                    <button key={`${option.label}-${index}`}>{option.label || `Opção ${index + 1}`}</button>
                   ))}
                 </div>
 
@@ -698,15 +961,15 @@ function App() {
                 </div>
               </div>
 
-              <button className="primaryAction" onClick={createRule} disabled={loading}>
+              <button className="primaryAction" onClick={saveRule} disabled={loading}>
                 {loading ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
-                Salvar automação
+                {editingRuleId ? 'Salvar alterações' : 'Salvar automação'}
               </button>
             </div>
           </div>
 
-          <details className="advancedBox">
-            <summary>Configuração avançada</summary>
+          <details className="advancedBox" open>
+            <summary>Configuração da automação</summary>
 
             <div className="formGrid">
               <label>
@@ -752,17 +1015,25 @@ function App() {
               </label>
 
               {form.options.map((option, index) => (
-                <div className="wide optionEditor" key={`${option.label}-${index}`}>
+                <div className="wide optionEditor" key={`option-${index}`}>
+                  <div className="optionEditorHeader">
+                    <strong>Opção {index + 1}</strong>
+                    <button type="button" className="iconGhost" onClick={() => removeOption(index)} disabled={form.options.length <= 1}>
+                      <Trash2 size={15} />
+                    </button>
+                  </div>
+
                   <label>
-                    Texto do botão {index + 1}
+                    Texto do botão
                     <input
                       value={option.label}
                       onChange={(e) => updateOption(index, 'label', e.target.value)}
+                      maxLength={60}
                     />
                   </label>
 
                   <label>
-                    Resposta do botão {index + 1}
+                    Resposta do botão
                     <textarea
                       value={option.response}
                       onChange={(e) => updateOption(index, 'response', e.target.value)}
@@ -770,6 +1041,10 @@ function App() {
                   </label>
                 </div>
               ))}
+
+              <button type="button" className="wide ghost" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}>
+                <Plus size={18} /> Adicionar nova opção
+              </button>
             </div>
           </details>
         </section>
@@ -799,13 +1074,23 @@ function App() {
                   )}
                 </div>
 
-                <button
-                  className="danger"
-                  onClick={() => deleteRule(rule.id)}
-                  title="Excluir automação"
-                >
-                  <Trash2 size={16} />
-                </button>
+                <div className="ruleActions">
+                  <button
+                    className="ghost iconAction"
+                    onClick={() => editRule(rule)}
+                    title="Editar automação"
+                  >
+                    <Edit3 size={16} />
+                  </button>
+
+                  <button
+                    className="danger"
+                    onClick={() => deleteRule(rule.id)}
+                    title="Excluir automação"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                </div>
               </div>
             ))}
 
@@ -838,12 +1123,20 @@ function App() {
                 <p>{log.comment_text || 'Sem texto'}</p>
 
                 {log.matched_keyword && <span>Gatilho: {log.matched_keyword}</span>}
+                {log.error && <span>Erro: {log.error}</span>}
               </div>
             ))}
 
             {!logs.length && <p className="empty">Nenhum evento registrado ainda.</p>}
           </div>
         </section>
+
+        <AccountSettings
+          user={user}
+          loading={loading}
+          apiFetch={apiFetch}
+          onUserUpdated={setUser}
+        />
       </section>
     </main>
   );
