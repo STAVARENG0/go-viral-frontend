@@ -202,6 +202,159 @@ function PasswordStrength({ password }) {
   );
 }
 
+function AppUiStyles() {
+  return (
+    <style>{`
+      .centeredHeader {
+        align-items: center;
+        gap: 18px;
+      }
+
+      .brandTop {
+        align-items: center;
+      }
+
+      .brandLogoSmall {
+        width: 86px !important;
+        height: 86px !important;
+        object-fit: contain;
+      }
+
+      .brandTop h1 {
+        font-size: clamp(2.35rem, 7vw, 3.5rem) !important;
+        line-height: 0.92;
+        letter-spacing: -0.06em;
+      }
+
+      .brandTop p {
+        font-size: 1rem;
+      }
+
+      .compactConnectionPanel {
+        margin-top: 14px;
+      }
+
+      .connectionStatusBox {
+        display: flex;
+        gap: 14px;
+        align-items: center;
+        padding: 14px;
+        border: 1px solid rgba(255, 71, 87, 0.16);
+        border-radius: 22px;
+        background: rgba(255, 255, 255, 0.72);
+        margin: 12px 0 14px;
+      }
+
+      .connectionStatusBox h3 {
+        margin: 0 0 4px;
+        font-size: 1rem;
+      }
+
+      .connectionStatusBox p {
+        margin: 0;
+      }
+
+      .connectionActionsSeparated {
+        display: grid;
+        gap: 10px;
+      }
+
+      .connectionActionsSeparated button {
+        width: 100%;
+        justify-content: center;
+      }
+
+      .instagramConnectButton {
+        min-height: 46px;
+      }
+
+      .instagramDisconnectButton {
+        min-height: 44px;
+        border: 1px solid rgba(220, 38, 38, 0.22);
+        background: rgba(254, 242, 242, 0.85);
+      }
+
+      .profileHero {
+        margin-top: 14px;
+      }
+
+      .automationScopeBox {
+        display: grid;
+        gap: 12px;
+        padding: 14px;
+        border-radius: 22px;
+        background: rgba(255, 248, 248, 0.75);
+        border: 1px solid rgba(255, 71, 87, 0.14);
+      }
+
+      .automationScopeHeader {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-weight: 800;
+      }
+
+      .automationScopeChoices {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 10px;
+      }
+
+      .scopeChoice {
+        display: flex;
+        gap: 10px;
+        align-items: flex-start;
+        text-align: left;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        background: #fff;
+        border-radius: 18px;
+        padding: 12px;
+        color: inherit;
+      }
+
+      .scopeChoice.active {
+        border-color: rgba(255, 71, 87, 0.45);
+        box-shadow: 0 10px 24px rgba(255, 71, 87, 0.12);
+      }
+
+      .scopeChoice strong {
+        display: block;
+        margin-bottom: 2px;
+      }
+
+      .scopeChoice small {
+        display: block;
+        opacity: 0.72;
+        line-height: 1.35;
+      }
+
+      .finalSaveArea {
+        display: grid;
+        gap: 10px;
+        margin-top: 18px;
+        padding-top: 16px;
+        border-top: 1px solid rgba(15, 23, 42, 0.08);
+      }
+
+      .finalSaveArea .primaryAction {
+        width: 100%;
+        min-height: 50px;
+        justify-content: center;
+        font-size: 1rem;
+      }
+
+      .finalSaveArea small {
+        text-align: center;
+        color: rgba(15, 23, 42, 0.62);
+      }
+
+      .ruleScope {
+        margin-top: 6px;
+      }
+    `}</style>
+  );
+}
+
 function AuthScreen({ loading, onAuthenticated }) {
   const params = new URLSearchParams(window.location.search);
   const initialRef = params.get('ref') || '';
@@ -1048,6 +1201,14 @@ function App() {
   }
 
   async function saveRule() {
+    const selectedPublicationMode = form.publicationMode || 'all';
+    const selectedPublicationUrl = String(form.publicationUrl || '').trim();
+
+    if (selectedPublicationMode === 'single' && !selectedPublicationUrl) {
+      alert('Cole o link da publicação antes de salvar.');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -1059,8 +1220,8 @@ function App() {
         message: form.message,
         linkLabel: form.linkLabel,
         linkUrl: form.linkUrl,
-        publicationMode: form.publicationMode,
-        publicationUrl: form.publicationUrl,
+        publicationMode: selectedPublicationMode,
+        publicationUrl: selectedPublicationUrl,
         active: form.active,
         options: cleanOptions(form.options)
       };
@@ -1302,6 +1463,8 @@ function App() {
 
   return (
     <main className="appShell">
+      <AppUiStyles />
+
       <section className="siteFrame">
         <header className="siteHeader centeredHeader">
           <div className="brandTop">
@@ -1349,44 +1512,36 @@ function App() {
           </button>
         </nav>
 
-        <section className="panel connectionPanel" id="conta">
+        <section className="panel connectionPanel compactConnectionPanel" id="conta">
           <h2>
             <Instagram size={20} /> Conexão do Instagram
           </h2>
 
-          <p>
-            {mainAccount
-              ? `Instagram conectado: @${mainAccount.username}.`
-              : 'Conecte o Instagram que vai usar as automações desta conta.'}
-          </p>
+          <div className="connectionStatusBox">
+            <InstagramAvatar account={mainAccount} />
 
-          <div className="connectionActions">
-            <button onClick={connectInstagram} disabled={loading}>
+            <div>
+              <h3>{mainAccount ? `@${mainAccount.username}` : 'Nenhum Instagram conectado'}</h3>
+              <p>
+                {mainAccount
+                  ? 'Conta conectada e pronta para usar nas automações.'
+                  : 'Conecte o Instagram antes de ativar suas automações.'}
+              </p>
+            </div>
+          </div>
+
+          <div className="connectionActionsSeparated">
+            <button className="instagramConnectButton primaryAction" onClick={connectInstagram} disabled={loading}>
               <Instagram size={18} />
-              {mainAccount ? 'Trocar Instagram' : 'Conectar Instagram'}
+              {mainAccount ? 'Trocar Instagram conectado' : 'Conectar Instagram'}
             </button>
 
             {mainAccount && (
-              <button className="dangerText" onClick={disconnectInstagram} disabled={loading}>
+              <button className="instagramDisconnectButton dangerText" onClick={disconnectInstagram} disabled={loading}>
                 <Trash2 size={18} />
                 Desconectar Instagram
               </button>
             )}
-          </div>
-        </section>
-
-        <section className="heroBanner">
-          <div className="heroContent">
-            <span className="eyebrow">
-              <Zap size={14} /> Cliente entra, escolhe e continua conversando
-            </span>
-
-            <h2>Automação para Instagram no estilo Go Viral.</h2>
-
-            <p>
-              Monte fluxos com opções editáveis para comentário, direct e seguidores.
-              A prévia mostra como a conversa aparece para o cliente.
-            </p>
           </div>
         </section>
 
@@ -1521,10 +1676,6 @@ function App() {
                 </div>
               </div>
 
-              <button className="primaryAction" onClick={saveRule} disabled={loading}>
-                {loading ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
-                {editingRuleId ? 'Salvar alterações' : 'Salvar automação'}
-              </button>
             </div>
           </div>
 
@@ -1547,6 +1698,50 @@ function App() {
                   onChange={(e) => setForm({ ...form, keyword: e.target.value })}
                 />
               </label>
+
+              <div className="wide automationScopeBox">
+                <div className="automationScopeHeader">
+                  <MessageCircle size={17} />
+                  Publicações que vão ativar esta automação
+                </div>
+
+                <div className="automationScopeChoices">
+                  <button
+                    type="button"
+                    className={(form.publicationMode || 'all') === 'all' ? 'scopeChoice active' : 'scopeChoice'}
+                    onClick={() => setForm({ ...form, publicationMode: 'all', publicationUrl: '' })}
+                  >
+                    <CheckCircle2 size={18} />
+                    <span>
+                      <strong>Todas as publicações</strong>
+                      <small>Qualquer publicação com essa palavra-chave pode iniciar a automação.</small>
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className={form.publicationMode === 'single' ? 'scopeChoice active' : 'scopeChoice'}
+                    onClick={() => setForm({ ...form, publicationMode: 'single' })}
+                  >
+                    <LinkIcon size={18} />
+                    <span>
+                      <strong>Somente uma publicação</strong>
+                      <small>A automação só funciona na publicação que você escolher.</small>
+                    </span>
+                  </button>
+                </div>
+
+                {form.publicationMode === 'single' && (
+                  <label>
+                    Link da publicação
+                    <input
+                      placeholder="https://www.instagram.com/p/..."
+                      value={form.publicationUrl}
+                      onChange={(e) => setForm({ ...form, publicationUrl: e.target.value })}
+                    />
+                  </label>
+                )}
+              </div>
 
               <label className="wide">
                 Mensagem inicial
@@ -1605,6 +1800,15 @@ function App() {
               <button type="button" className="wide ghost" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}>
                 <Plus size={18} /> Adicionar nova opção
               </button>
+
+              <div className="wide finalSaveArea">
+                <button type="button" className="primaryAction" onClick={saveRule} disabled={loading}>
+                  {loading ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
+                  {editingRuleId ? 'Salvar alterações da automação' : 'Salvar automação'}
+                </button>
+
+                <small>Revise tudo acima antes de salvar.</small>
+              </div>
             </div>
           </details>
         </section>
@@ -1625,6 +1829,12 @@ function App() {
 
                   <span>
                     <ArrowRight size={14} /> {rule.options?.length || 0} opções configuradas
+                  </span>
+
+                  <span className="ruleScope">
+                    <MessageCircle size={14} /> {(rule.publicationMode || rule.publication_mode) === 'single'
+                      ? `Somente uma publicação${(rule.publicationUrl || rule.publication_url) ? `: ${rule.publicationUrl || rule.publication_url}` : ''}`
+                      : 'Todas as publicações'}
                   </span>
 
                   {rule.link_url && (
