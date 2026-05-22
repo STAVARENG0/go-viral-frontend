@@ -25,7 +25,7 @@ import {
   Zap
 } from 'lucide-react';
 
-const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://server-production-3741.up.railway.app').replace(/\/$/, '');
+const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.matheus-caetano.com').replace(/\/$/, '');
 
 const triggerTemplates = [
   {
