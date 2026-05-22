@@ -6,6 +6,10 @@ import {
   ArrowRight,
   Bot,
   CheckCircle2,
+  DollarSign,
+  Copy,
+  Gift,
+  CreditCard,
   Clock3,
   Edit3,
   Instagram,
@@ -166,12 +170,17 @@ function InstagramAvatar({ account }) {
 }
 
 function AuthScreen({ loading, onAuthenticated }) {
+  const params = new URLSearchParams(window.location.search);
+  const initialRef = params.get('ref') || '';
+  const [mode, setMode] = useState('login');
   const [step, setStep] = useState('form');
+  const [plans, setPlans] = useState([]);
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
     email: '',
     code: '',
+    referralCode: initialRef,
     termsAccepted: false,
     privacyAccepted: false
   });
@@ -202,15 +211,21 @@ function AuthScreen({ loading, onAuthenticated }) {
     setSending(true);
 
     try {
-      await apiFetch('/api/auth/request-code', {
+      const path = mode === 'login' ? '/api/auth/login-code' : '/api/auth/request-code';
+      const body = mode === 'login'
+        ? { email: form.email }
+        : {
+            firstName: form.firstName,
+            lastName: form.lastName,
+            email: form.email,
+            referralCode: form.referralCode,
+            termsAccepted: form.termsAccepted,
+            privacyAccepted: form.privacyAccepted
+          };
+
+      await apiFetch(path, {
         method: 'POST',
-        body: JSON.stringify({
-          firstName: form.firstName,
-          lastName: form.lastName,
-          email: form.email,
-          termsAccepted: form.termsAccepted,
-          privacyAccepted: form.privacyAccepted
-        })
+        body: JSON.stringify(body)
       });
 
       setStep('code');
@@ -239,8 +254,12 @@ function AuthScreen({ loading, onAuthenticated }) {
     }
   }
 
+  useEffect(() => {
+    apiFetch('/api/plans').then(setPlans).catch(() => setPlans([]));
+  }, []);
+
   return (
-    <main className="loginPage">
+    <main className="loginPage authWithPlans">
       <section className="loginCard glassCard clientLoginCard">
         <img src="/logo.png" alt="Instagram Go Viral" className="logo" />
 
@@ -248,29 +267,40 @@ function AuthScreen({ loading, onAuthenticated }) {
         <p className="loginSubline">Automação para Instagram</p>
         <p>Painel privado para criar automações que seguram o cliente no direct.</p>
 
+        <div className="authTabs">
+          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setStep('form'); }}>
+            Entrar
+          </button>
+          <button type="button" className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setStep('form'); }}>
+            Criar conta
+          </button>
+        </div>
+
         {step === 'form' ? (
           <form onSubmit={requestCode} className="stack clientAuthForm">
-            <div className="inlineFields">
-              <label>
-                Nome
-                <input
-                  value={form.firstName}
-                  onChange={(e) => update('firstName', e.target.value)}
-                  placeholder="Seu nome"
-                  autoComplete="given-name"
-                />
-              </label>
+            {mode === 'signup' && (
+              <div className="inlineFields">
+                <label>
+                  Nome
+                  <input
+                    value={form.firstName}
+                    onChange={(e) => update('firstName', e.target.value)}
+                    placeholder="Seu nome"
+                    autoComplete="given-name"
+                  />
+                </label>
 
-              <label>
-                Sobrenome
-                <input
-                  value={form.lastName}
-                  onChange={(e) => update('lastName', e.target.value)}
-                  placeholder="Seu sobrenome"
-                  autoComplete="family-name"
-                />
-              </label>
-            </div>
+                <label>
+                  Sobrenome
+                  <input
+                    value={form.lastName}
+                    onChange={(e) => update('lastName', e.target.value)}
+                    placeholder="Seu sobrenome"
+                    autoComplete="family-name"
+                  />
+                </label>
+              </div>
+            )}
 
             <label>
               E-mail
@@ -283,35 +313,50 @@ function AuthScreen({ loading, onAuthenticated }) {
               />
             </label>
 
-            <label className="checkLine">
-              <input
-                type="checkbox"
-                checked={form.termsAccepted}
-                onChange={(e) => update('termsAccepted', e.target.checked)}
-              />
-              <span>
-                Aceito os <a href={`${API_BASE}/terms`} target="_blank" rel="noreferrer">Termos de Uso</a>.
-              </span>
-            </label>
+            {mode === 'signup' && (
+              <>
+                <label>
+                  Cupom/link de indicação {initialRef ? '(detectado)' : '(opcional)'}
+                  <input
+                    value={form.referralCode}
+                    onChange={(e) => update('referralCode', e.target.value.toUpperCase())}
+                    placeholder="Ex: MATHEUS123"
+                  />
+                </label>
 
-            <label className="checkLine">
-              <input
-                type="checkbox"
-                checked={form.privacyAccepted}
-                onChange={(e) => update('privacyAccepted', e.target.checked)}
-              />
-              <span>
-                Aceito a <a href={`${API_BASE}/privacy`} target="_blank" rel="noreferrer">Política de Privacidade</a>.
-              </span>
-            </label>
+                <label className="checkLine">
+                  <input
+                    type="checkbox"
+                    checked={form.termsAccepted}
+                    onChange={(e) => update('termsAccepted', e.target.checked)}
+                  />
+                  <span>
+                    Aceito os <a href={`${API_BASE}/terms`} target="_blank" rel="noreferrer">Termos de Uso</a>.
+                  </span>
+                </label>
+
+                <label className="checkLine">
+                  <input
+                    type="checkbox"
+                    checked={form.privacyAccepted}
+                    onChange={(e) => update('privacyAccepted', e.target.checked)}
+                  />
+                  <span>
+                    Aceito a <a href={`${API_BASE}/privacy`} target="_blank" rel="noreferrer">Política de Privacidade</a>.
+                  </span>
+                </label>
+              </>
+            )}
 
             <button disabled={sending || loading}>
               {sending ? <Loader2 className="spin" size={18} /> : <Mail size={18} />}
-              Enviar código por e-mail
+              {mode === 'login' ? 'Enviar código de login' : 'Enviar código por e-mail'}
             </button>
 
             <small className="legalSmall">
-              Ao continuar, você autoriza o uso dos dados informados para criação da conta, autenticação e operação da ferramenta.
+              {mode === 'login'
+                ? 'Você entra com um código seguro enviado para o e-mail cadastrado.'
+                : 'Ao continuar, você autoriza o uso dos dados informados para criação da conta, autenticação e operação da ferramenta.'}
             </small>
           </form>
         ) : (
@@ -343,6 +388,30 @@ function AuthScreen({ loading, onAuthenticated }) {
             </button>
           </form>
         )}
+      </section>
+
+      <section className="pricingPreview glassCard">
+        <span className="eyebrow"><Sparkles size={14} /> Escolha seu plano depois do cadastro</span>
+        <h2>Planos Go Viral</h2>
+        <p>O plano Pro é o ponto ideal para começar vendendo mais com até 2 Instagrams.</p>
+
+        <div className="pricingGrid compact">
+          {(plans.length ? plans : [
+            { id: 'basic', name: 'Básico', priceLabel: 'R$ 39,90/mês', affiliateCommissionLabel: 'R$ 10,00', features: ['1 Instagram', '3 automações', '500 interações/mês'] },
+            { id: 'pro', name: 'Pro', priceLabel: 'R$ 79,90/mês', affiliateCommissionLabel: 'R$ 25,00', highlighted: true, features: ['2 Instagrams', '7 automações', '3.000 interações/mês'] },
+            { id: 'elite', name: 'Elite', priceLabel: 'R$ 199,90/mês', affiliateCommissionLabel: 'R$ 60,00', features: ['5 Instagrams', '20 automações', '15.000 interações/mês'] }
+          ]).map((plan) => (
+            <article className={plan.highlighted ? 'priceCard featured' : 'priceCard'} key={plan.id}>
+              {plan.highlighted && <span className="bestBadge">Mais escolhido</span>}
+              <h3>{plan.name}</h3>
+              <strong>{plan.priceLabel}</strong>
+              <small>Afiliado ganha {plan.affiliateCommissionLabel}</small>
+              <ul>
+                {plan.features.slice(0, 4).map((feature) => <li key={feature}><CheckCircle2 size={14} /> {feature}</li>)}
+              </ul>
+            </article>
+          ))}
+        </div>
       </section>
     </main>
   );
@@ -442,6 +511,147 @@ function AccountSettings({ user, loading, apiFetch, onUserUpdated }) {
   );
 }
 
+
+function BillingPanel({ billing, plans, loading, onChoosePlan }) {
+  const subscription = billing?.subscription || { planId: 'free', planName: 'Grátis', status: 'free' };
+
+  return (
+    <section className="panel billingPanel" id="planos">
+      <div className="panelHeader">
+        <div>
+          <h2><CreditCard size={20} /> Planos e assinatura</h2>
+          <p>Escolha o plano ideal. O Pro é o melhor equilíbrio para vender mais sem começar caro.</p>
+        </div>
+        <div className="currentPlanBadge">
+          Plano atual: <strong>{subscription.planName || subscription.planId}</strong>
+        </div>
+      </div>
+
+      <div className="pricingGrid">
+        {plans.map((plan) => (
+          <article className={plan.highlighted ? 'priceCard featured' : 'priceCard'} key={plan.id}>
+            {plan.highlighted && <span className="bestBadge">Mais escolhido</span>}
+            <h3>{plan.name}</h3>
+            <strong>{plan.priceLabel}</strong>
+            <small>Afiliado ganha {plan.affiliateCommissionLabel}</small>
+            <ul>
+              {plan.features.map((feature) => <li key={feature}><CheckCircle2 size={14} /> {feature}</li>)}
+            </ul>
+            <button disabled={loading} onClick={() => onChoosePlan(plan.id)}>
+              <CreditCard size={18} /> Assinar {plan.name}
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function AffiliatePanel({ affiliate, loading, apiFetch, onRefresh }) {
+  const [code, setCode] = useState(affiliate?.referralCode || '');
+  const [pixKey, setPixKey] = useState(affiliate?.pixKey || '');
+
+  useEffect(() => {
+    setCode(affiliate?.referralCode || '');
+    setPixKey(affiliate?.pixKey || '');
+  }, [affiliate?.referralCode, affiliate?.pixKey]);
+
+  async function copyLink() {
+    try {
+      await navigator.clipboard.writeText(affiliate?.referralLink || '');
+      alert('Link copiado.');
+    } catch {
+      alert(affiliate?.referralLink || 'Link indisponível.');
+    }
+  }
+
+  async function saveCode() {
+    try {
+      await apiFetch('/api/affiliate/code', {
+        method: 'POST',
+        body: JSON.stringify({ code })
+      });
+      await onRefresh();
+      alert('Código atualizado.');
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  async function savePix() {
+    try {
+      await apiFetch('/api/affiliate/pix', {
+        method: 'PATCH',
+        body: JSON.stringify({ pixKey })
+      });
+      await onRefresh();
+      alert('Pix salvo.');
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  async function requestPayout() {
+    try {
+      await apiFetch('/api/affiliate/payout-request', {
+        method: 'POST',
+        body: JSON.stringify({ pixKey })
+      });
+      await onRefresh();
+      alert('Solicitação de saque registrada.');
+    } catch (error) {
+      alert(error.message);
+    }
+  }
+
+  return (
+    <section className="panel affiliatePanel" id="afiliados">
+      <div className="panelHeader">
+        <div>
+          <h2><Gift size={20} /> Afiliados e indicação</h2>
+          <p>Divulgue seu link, indique clientes e acumule comissão para sacar via Pix.</p>
+        </div>
+      </div>
+
+      <div className="affiliateStats">
+        <div><small>Saldo pendente</small><strong>{affiliate?.pendingLabel || 'R$ 0,00'}</strong></div>
+        <div><small>Saldo liberado</small><strong>{affiliate?.availableLabel || 'R$ 0,00'}</strong></div>
+        <div><small>Total recebido</small><strong>{affiliate?.paidLabel || 'R$ 0,00'}</strong></div>
+        <div><small>Indicados</small><strong>{affiliate?.totalReferrals || 0}</strong></div>
+      </div>
+
+      <div className="formGrid">
+        <label>
+          Seu cupom/código
+          <input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} />
+        </label>
+        <button type="button" onClick={saveCode} disabled={loading}>
+          <Save size={18} /> Salvar cupom
+        </button>
+
+        <label className="wide">
+          Seu link de indicação
+          <input value={affiliate?.referralLink || ''} readOnly />
+        </label>
+        <button type="button" className="wide ghost" onClick={copyLink} disabled={!affiliate?.referralLink}>
+          <Copy size={18} /> Copiar link de indicação
+        </button>
+
+        <label className="wide">
+          Chave Pix para saque
+          <input value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" />
+        </label>
+        <button type="button" onClick={savePix} disabled={loading}>
+          <Save size={18} /> Salvar Pix
+        </button>
+        <button type="button" className="primaryAction" onClick={requestPayout} disabled={loading}>
+          <DollarSign size={18} /> Solicitar saque
+        </button>
+      </div>
+    </section>
+  );
+}
+
 function App() {
   const cameFromInstagram = window.location.search.includes('connected=instagram');
 
@@ -450,6 +660,9 @@ function App() {
   const [rules, setRules] = useState([]);
   const [accounts, setAccounts] = useState([]);
   const [logs, setLogs] = useState([]);
+  const [billing, setBilling] = useState(null);
+  const [plans, setPlans] = useState([]);
+  const [affiliate, setAffiliate] = useState(null);
   const [loading, setLoading] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState(null);
   const [form, setForm] = useState(createFormFromTemplate());
@@ -498,15 +711,19 @@ function App() {
     setLoading(true);
 
     try {
-      const [rulesData, accountsData, logsData] = await Promise.all([
+      const [rulesData, accountsData, logsData, billingData] = await Promise.all([
         apiFetch('/api/rules'),
         apiFetch('/api/accounts'),
-        apiFetch('/api/logs')
+        apiFetch('/api/logs'),
+        apiFetch('/api/billing/status')
       ]);
 
       setRules(Array.isArray(rulesData) ? rulesData : []);
       setAccounts(Array.isArray(accountsData) ? accountsData : []);
       setLogs(Array.isArray(logsData) ? logsData : []);
+      setBilling(billingData || null);
+      setPlans(Array.isArray(billingData?.plans) ? billingData.plans : []);
+      setAffiliate(billingData?.affiliate || null);
     } catch (err) {
       console.error(err);
       if (/sessão|unauthorized|expirada/i.test(err.message)) {
@@ -665,6 +882,28 @@ function App() {
     }
   }
 
+  async function choosePlan(planId) {
+    setLoading(true);
+
+    try {
+      const data = await apiFetch('/api/billing/checkout', {
+        method: 'POST',
+        body: JSON.stringify({ planId, referralCode: new URLSearchParams(window.location.search).get('ref') || '' })
+      });
+
+      if (data.checkoutUrl) {
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+
+      alert('Checkout criado, mas o link não veio do Mercado Pago.');
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
   function connectInstagram() {
     window.location.href = `${API_BASE}/auth/instagram/start`;
   }
@@ -680,6 +919,9 @@ function App() {
     setRules([]);
     setAccounts([]);
     setLogs([]);
+    setBilling(null);
+    setPlans([]);
+    setAffiliate(null);
   }
 
   function pickTrigger(template) {
@@ -778,6 +1020,14 @@ function App() {
 
           <a className="menuItem" href="#logs">
             <Activity size={15} /> Registro de atividades
+          </a>
+
+          <a className="menuItem" href="#planos">
+            <CreditCard size={15} /> Planos
+          </a>
+
+          <a className="menuItem" href="#afiliados">
+            <Gift size={15} /> Afiliados
           </a>
 
           <a className="menuItem" href="#configuracoes">
@@ -1130,6 +1380,20 @@ function App() {
             {!logs.length && <p className="empty">Nenhum evento registrado ainda.</p>}
           </div>
         </section>
+
+        <BillingPanel
+          billing={billing}
+          plans={plans}
+          loading={loading}
+          onChoosePlan={choosePlan}
+        />
+
+        <AffiliatePanel
+          affiliate={affiliate}
+          loading={loading}
+          apiFetch={apiFetch}
+          onRefresh={loadData}
+        />
 
         <AccountSettings
           user={user}
