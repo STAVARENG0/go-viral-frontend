@@ -1345,7 +1345,6 @@ function App() {
 
   function choosePlan(plan) {
     setCheckoutPlan(plan);
-    window.location.hash = '#checkout';
   }
 
   async function confirmCheckout(planId, paymentMethod) {
