@@ -169,16 +169,50 @@ function InstagramAvatar({ account }) {
   );
 }
 
+
+function getPasswordStrength(password) {
+  const value = String(password || '');
+  let score = 0;
+
+  if (value.length >= 8) score += 1;
+  if (value.length >= 12) score += 1;
+  if (/[a-z]/.test(value) && /[A-Z]/.test(value)) score += 1;
+  if (/\d/.test(value)) score += 1;
+  if (/[^A-Za-z0-9]/.test(value)) score += 1;
+
+  if (!value) return { score: 0, label: 'Digite uma senha', className: 'empty' };
+  if (score <= 2) return { score, label: 'Senha fraca', className: 'weak' };
+  if (score === 3) return { score, label: 'Senha boa', className: 'good' };
+  return { score, label: 'Senha forte', className: 'strong' };
+}
+
+function PasswordStrength({ password }) {
+  const strength = getPasswordStrength(password);
+  const bars = [1, 2, 3, 4];
+
+  return (
+    <div className={`passwordStrength ${strength.className}`}>
+      <div className="strengthBars">
+        {bars.map((bar) => (
+          <span key={bar} className={bar <= Math.min(strength.score, 4) ? 'filled' : ''} />
+        ))}
+      </div>
+      <small>{strength.label}</small>
+    </div>
+  );
+}
+
 function AuthScreen({ loading, onAuthenticated }) {
   const params = new URLSearchParams(window.location.search);
   const initialRef = params.get('ref') || '';
   const [mode, setMode] = useState('login');
   const [step, setStep] = useState('form');
-  const [plans, setPlans] = useState([]);
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
     email: '',
+    password: '',
+    confirmPassword: '',
     code: '',
     referralCode: initialRef,
     termsAccepted: false,
@@ -188,6 +222,12 @@ function AuthScreen({ loading, onAuthenticated }) {
 
   function update(field, value) {
     setForm((prev) => ({ ...prev, [field]: value }));
+  }
+
+  function switchMode(nextMode) {
+    setMode(nextMode);
+    setStep('form');
+    setForm((prev) => ({ ...prev, password: '', confirmPassword: '', code: '' }));
   }
 
   async function apiFetch(path, options = {}) {
@@ -206,26 +246,52 @@ function AuthScreen({ loading, onAuthenticated }) {
     return data;
   }
 
-  async function requestCode(e) {
+  async function login(e) {
     e.preventDefault();
     setSending(true);
 
     try {
-      const path = mode === 'login' ? '/api/auth/login-code' : '/api/auth/request-code';
-      const body = mode === 'login'
-        ? { email: form.email }
-        : {
-            firstName: form.firstName,
-            lastName: form.lastName,
-            email: form.email,
-            referralCode: form.referralCode,
-            termsAccepted: form.termsAccepted,
-            privacyAccepted: form.privacyAccepted
-          };
-
-      await apiFetch(path, {
+      const data = await apiFetch('/api/login', {
         method: 'POST',
-        body: JSON.stringify(body)
+        body: JSON.stringify({ email: form.email, password: form.password })
+      });
+
+      onAuthenticated(data.user);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function signup(e) {
+    e.preventDefault();
+
+    if (form.password !== form.confirmPassword) {
+      alert('As senhas não conferem.');
+      return;
+    }
+
+    if (getPasswordStrength(form.password).score < 3) {
+      alert('Use uma senha melhor antes de continuar.');
+      return;
+    }
+
+    setSending(true);
+
+    try {
+      await apiFetch('/api/auth/signup-code', {
+        method: 'POST',
+        body: JSON.stringify({
+          firstName: form.firstName,
+          lastName: form.lastName,
+          email: form.email,
+          password: form.password,
+          confirmPassword: form.confirmPassword,
+          referralCode: form.referralCode,
+          termsAccepted: form.termsAccepted,
+          privacyAccepted: form.privacyAccepted
+        })
       });
 
       setStep('code');
@@ -236,12 +302,12 @@ function AuthScreen({ loading, onAuthenticated }) {
     }
   }
 
-  async function verifyCode(e) {
+  async function verifySignup(e) {
     e.preventDefault();
     setSending(true);
 
     try {
-      const data = await apiFetch('/api/auth/verify-code', {
+      const data = await apiFetch('/api/auth/signup-verify-password', {
         method: 'POST',
         body: JSON.stringify({ email: form.email, code: form.code })
       });
@@ -254,12 +320,55 @@ function AuthScreen({ loading, onAuthenticated }) {
     }
   }
 
-  useEffect(() => {
-    apiFetch('/api/plans').then(setPlans).catch(() => setPlans([]));
-  }, []);
+  async function requestResetCode(e) {
+    e.preventDefault();
+    setSending(true);
+
+    try {
+      await apiFetch('/api/auth/reset-code', {
+        method: 'POST',
+        body: JSON.stringify({ email: form.email })
+      });
+
+      setStep('code');
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setSending(false);
+    }
+  }
+
+  async function resetPassword(e) {
+    e.preventDefault();
+
+    if (form.password !== form.confirmPassword) {
+      alert('As senhas não conferem.');
+      return;
+    }
+
+    if (getPasswordStrength(form.password).score < 3) {
+      alert('Use uma senha melhor antes de continuar.');
+      return;
+    }
+
+    setSending(true);
+
+    try {
+      const data = await apiFetch('/api/auth/reset-password', {
+        method: 'POST',
+        body: JSON.stringify({ email: form.email, code: form.code, password: form.password })
+      });
+
+      onAuthenticated(data.user);
+    } catch (error) {
+      alert(error.message);
+    } finally {
+      setSending(false);
+    }
+  }
 
   return (
-    <main className="loginPage authWithPlans">
+    <main className="loginPage">
       <section className="loginCard glassCard clientLoginCard">
         <img src="/logo.png" alt="Instagram Go Viral" className="logo" />
 
@@ -268,39 +377,72 @@ function AuthScreen({ loading, onAuthenticated }) {
         <p>Painel privado para criar automações que seguram o cliente no direct.</p>
 
         <div className="authTabs">
-          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => { setMode('login'); setStep('form'); }}>
+          <button type="button" className={mode === 'login' ? 'active' : ''} onClick={() => switchMode('login')}>
             Entrar
           </button>
-          <button type="button" className={mode === 'signup' ? 'active' : ''} onClick={() => { setMode('signup'); setStep('form'); }}>
+          <button type="button" className={mode === 'signup' ? 'active' : ''} onClick={() => switchMode('signup')}>
             Criar conta
           </button>
         </div>
 
-        {step === 'form' ? (
-          <form onSubmit={requestCode} className="stack clientAuthForm">
-            {mode === 'signup' && (
-              <div className="inlineFields">
-                <label>
-                  Nome
-                  <input
-                    value={form.firstName}
-                    onChange={(e) => update('firstName', e.target.value)}
-                    placeholder="Seu nome"
-                    autoComplete="given-name"
-                  />
-                </label>
+        {mode === 'login' && (
+          <form onSubmit={login} className="stack clientAuthForm">
+            <label>
+              E-mail
+              <input
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                placeholder="voce@email.com"
+                type="email"
+                autoComplete="email"
+              />
+            </label>
 
-                <label>
-                  Sobrenome
-                  <input
-                    value={form.lastName}
-                    onChange={(e) => update('lastName', e.target.value)}
-                    placeholder="Seu sobrenome"
-                    autoComplete="family-name"
-                  />
-                </label>
-              </div>
-            )}
+            <label>
+              Senha
+              <input
+                value={form.password}
+                onChange={(e) => update('password', e.target.value)}
+                placeholder="Sua senha"
+                type="password"
+                autoComplete="current-password"
+              />
+            </label>
+
+            <button disabled={sending || loading}>
+              {sending ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
+              Entrar
+            </button>
+
+            <button type="button" className="ghost" onClick={() => switchMode('reset')} disabled={sending}>
+              Esqueci minha senha
+            </button>
+          </form>
+        )}
+
+        {mode === 'signup' && step === 'form' && (
+          <form onSubmit={signup} className="stack clientAuthForm">
+            <div className="inlineFields">
+              <label>
+                Nome
+                <input
+                  value={form.firstName}
+                  onChange={(e) => update('firstName', e.target.value)}
+                  placeholder="Seu nome"
+                  autoComplete="given-name"
+                />
+              </label>
+
+              <label>
+                Sobrenome
+                <input
+                  value={form.lastName}
+                  onChange={(e) => update('lastName', e.target.value)}
+                  placeholder="Seu sobrenome"
+                  autoComplete="family-name"
+                />
+              </label>
+            </div>
 
             <label>
               E-mail
@@ -313,54 +455,73 @@ function AuthScreen({ loading, onAuthenticated }) {
               />
             </label>
 
-            {mode === 'signup' && (
-              <>
-                <label>
-                  Cupom/link de indicação {initialRef ? '(detectado)' : '(opcional)'}
-                  <input
-                    value={form.referralCode}
-                    onChange={(e) => update('referralCode', e.target.value.toUpperCase())}
-                    placeholder="Ex: MATHEUS123"
-                  />
-                </label>
+            <label>
+              Senha
+              <input
+                value={form.password}
+                onChange={(e) => update('password', e.target.value)}
+                placeholder="Mínimo 8 caracteres"
+                type="password"
+                autoComplete="new-password"
+              />
+              <PasswordStrength password={form.password} />
+            </label>
 
-                <label className="checkLine">
-                  <input
-                    type="checkbox"
-                    checked={form.termsAccepted}
-                    onChange={(e) => update('termsAccepted', e.target.checked)}
-                  />
-                  <span>
-                    Aceito os <a href={`${API_BASE}/terms`} target="_blank" rel="noreferrer">Termos de Uso</a>.
-                  </span>
-                </label>
+            <label>
+              Repetir senha
+              <input
+                value={form.confirmPassword}
+                onChange={(e) => update('confirmPassword', e.target.value)}
+                placeholder="Digite a senha de novo"
+                type="password"
+                autoComplete="new-password"
+              />
+            </label>
 
-                <label className="checkLine">
-                  <input
-                    type="checkbox"
-                    checked={form.privacyAccepted}
-                    onChange={(e) => update('privacyAccepted', e.target.checked)}
-                  />
-                  <span>
-                    Aceito a <a href={`${API_BASE}/privacy`} target="_blank" rel="noreferrer">Política de Privacidade</a>.
-                  </span>
-                </label>
-              </>
-            )}
+            <label>
+              Cupom/link de indicação {initialRef ? '(detectado)' : '(opcional)'}
+              <input
+                value={form.referralCode}
+                onChange={(e) => update('referralCode', e.target.value.toUpperCase())}
+                placeholder="Ex: MATHEUS123"
+              />
+            </label>
+
+            <label className="checkLine">
+              <input
+                type="checkbox"
+                checked={form.termsAccepted}
+                onChange={(e) => update('termsAccepted', e.target.checked)}
+              />
+              <span>
+                Aceito os <a href={`${API_BASE}/terms`} target="_blank" rel="noreferrer">Termos de Uso</a>.
+              </span>
+            </label>
+
+            <label className="checkLine">
+              <input
+                type="checkbox"
+                checked={form.privacyAccepted}
+                onChange={(e) => update('privacyAccepted', e.target.checked)}
+              />
+              <span>
+                Aceito a <a href={`${API_BASE}/privacy`} target="_blank" rel="noreferrer">Política de Privacidade</a>.
+              </span>
+            </label>
 
             <button disabled={sending || loading}>
               {sending ? <Loader2 className="spin" size={18} /> : <Mail size={18} />}
-              {mode === 'login' ? 'Enviar código de login' : 'Enviar código por e-mail'}
+              Enviar código e criar conta
             </button>
 
             <small className="legalSmall">
-              {mode === 'login'
-                ? 'Você entra com um código seguro enviado para o e-mail cadastrado.'
-                : 'Ao continuar, você autoriza o uso dos dados informados para criação da conta, autenticação e operação da ferramenta.'}
+              A conta só será criada depois que você confirmar o código enviado por e-mail.
             </small>
           </form>
-        ) : (
-          <form onSubmit={verifyCode} className="stack clientAuthForm">
+        )}
+
+        {mode === 'signup' && step === 'code' && (
+          <form onSubmit={verifySignup} className="stack clientAuthForm">
             <div className="codeNotice">
               <CheckCircle2 size={18} />
               Enviamos um código para <strong>{form.email}</strong>.
@@ -380,7 +541,7 @@ function AuthScreen({ loading, onAuthenticated }) {
 
             <button disabled={sending || form.code.length !== 6}>
               {sending ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
-              Confirmar e entrar
+              Confirmar cadastro e entrar
             </button>
 
             <button type="button" className="ghost" onClick={() => setStep('form')} disabled={sending}>
@@ -388,30 +549,83 @@ function AuthScreen({ loading, onAuthenticated }) {
             </button>
           </form>
         )}
-      </section>
 
-      <section className="pricingPreview glassCard">
-        <span className="eyebrow"><Sparkles size={14} /> Escolha seu plano depois do cadastro</span>
-        <h2>Planos Go Viral</h2>
-        <p>O plano Pro é o ponto ideal para começar vendendo mais com até 2 Instagrams.</p>
+        {mode === 'reset' && step === 'form' && (
+          <form onSubmit={requestResetCode} className="stack clientAuthForm">
+            <label>
+              E-mail cadastrado
+              <input
+                value={form.email}
+                onChange={(e) => update('email', e.target.value)}
+                placeholder="voce@email.com"
+                type="email"
+                autoComplete="email"
+              />
+            </label>
 
-        <div className="pricingGrid compact">
-          {(plans.length ? plans : [
-            { id: 'basic', name: 'Básico', priceLabel: 'R$ 39,90/mês', affiliateCommissionLabel: 'R$ 10,00', features: ['1 Instagram', '3 automações', '500 interações/mês'] },
-            { id: 'pro', name: 'Pro', priceLabel: 'R$ 79,90/mês', affiliateCommissionLabel: 'R$ 25,00', highlighted: true, features: ['2 Instagrams', '7 automações', '3.000 interações/mês'] },
-            { id: 'elite', name: 'Elite', priceLabel: 'R$ 199,90/mês', affiliateCommissionLabel: 'R$ 60,00', features: ['5 Instagrams', '20 automações', '15.000 interações/mês'] }
-          ]).map((plan) => (
-            <article className={plan.highlighted ? 'priceCard featured' : 'priceCard'} key={plan.id}>
-              {plan.highlighted && <span className="bestBadge">Mais escolhido</span>}
-              <h3>{plan.name}</h3>
-              <strong>{plan.priceLabel}</strong>
-              <small>Afiliado ganha {plan.affiliateCommissionLabel}</small>
-              <ul>
-                {plan.features.slice(0, 4).map((feature) => <li key={feature}><CheckCircle2 size={14} /> {feature}</li>)}
-              </ul>
-            </article>
-          ))}
-        </div>
+            <button disabled={sending || loading}>
+              {sending ? <Loader2 className="spin" size={18} /> : <Mail size={18} />}
+              Enviar código para trocar senha
+            </button>
+
+            <button type="button" className="ghost" onClick={() => switchMode('login')} disabled={sending}>
+              Voltar para login
+            </button>
+          </form>
+        )}
+
+        {mode === 'reset' && step === 'code' && (
+          <form onSubmit={resetPassword} className="stack clientAuthForm">
+            <div className="codeNotice">
+              <CheckCircle2 size={18} />
+              Enviamos um código para <strong>{form.email}</strong>.
+            </div>
+
+            <label>
+              Código de confirmação
+              <input
+                value={form.code}
+                onChange={(e) => update('code', e.target.value.replace(/\D/g, '').slice(0, 6))}
+                placeholder="000000"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                className="codeInput"
+              />
+            </label>
+
+            <label>
+              Nova senha
+              <input
+                value={form.password}
+                onChange={(e) => update('password', e.target.value)}
+                placeholder="Mínimo 8 caracteres"
+                type="password"
+                autoComplete="new-password"
+              />
+              <PasswordStrength password={form.password} />
+            </label>
+
+            <label>
+              Confirmar nova senha
+              <input
+                value={form.confirmPassword}
+                onChange={(e) => update('confirmPassword', e.target.value)}
+                placeholder="Repita a senha"
+                type="password"
+                autoComplete="new-password"
+              />
+            </label>
+
+            <button disabled={sending || form.code.length !== 6}>
+              {sending ? <Loader2 className="spin" size={18} /> : <ShieldCheck size={18} />}
+              Trocar senha e entrar
+            </button>
+
+            <button type="button" className="ghost" onClick={() => setStep('form')} disabled={sending}>
+              Voltar
+            </button>
+          </form>
+        )}
       </section>
     </main>
   );
@@ -537,13 +751,98 @@ function BillingPanel({ billing, plans, loading, onChoosePlan }) {
             <ul>
               {plan.features.map((feature) => <li key={feature}><CheckCircle2 size={14} /> {feature}</li>)}
             </ul>
-            <button disabled={loading} onClick={() => onChoosePlan(plan.id)}>
+            <button disabled={loading} onClick={() => onChoosePlan(plan)}>
               <CreditCard size={18} /> Assinar {plan.name}
             </button>
           </article>
         ))}
       </div>
     </section>
+  );
+}
+
+
+function CheckoutModal({ plan, loading, onClose, onConfirm }) {
+  const [method, setMethod] = useState('pix');
+
+  if (!plan) return null;
+
+  const methods = [
+    { id: 'pix', title: 'Pix', subtitle: 'Liberação rápida depois da confirmação.' },
+    { id: 'card', title: 'Cartão de crédito', subtitle: 'Pagamento seguro no ambiente Mercado Pago.' },
+    { id: 'boleto', title: 'Boleto', subtitle: 'Disponível conforme análise do Mercado Pago.' }
+  ];
+
+  return (
+    <div className="checkoutOverlay" role="dialog" aria-modal="true">
+      <section className="checkoutSheet glassCard">
+        <button className="checkoutClose" onClick={onClose} disabled={loading} aria-label="Fechar checkout">
+          <X size={18} />
+        </button>
+
+        <div className="checkoutHeader">
+          <span className="eyebrow"><ShieldCheck size={14} /> Checkout seguro</span>
+          <h2>Finalize seu plano {plan.name}</h2>
+          <p>Confira o plano, escolha a forma de pagamento e continue no Mercado Pago para concluir com segurança.</p>
+        </div>
+
+        <div className="checkoutGrid">
+          <article className="checkoutSummary">
+            {plan.highlighted && <span className="bestBadge">Mais escolhido</span>}
+            <h3>{plan.name}</h3>
+            <strong>{plan.priceLabel}</strong>
+            <small>Renovação mensal. Você pode cancelar quando quiser.</small>
+
+            <ul>
+              {plan.features.map((feature) => (
+                <li key={feature}><CheckCircle2 size={14} /> {feature}</li>
+              ))}
+            </ul>
+
+            <div className="affiliateCheckoutNote">
+              <Gift size={17} />
+              <span>Indicação deste plano gera {plan.affiliateCommissionLabel} para o afiliado após confirmação e liberação.</span>
+            </div>
+          </article>
+
+          <article className="paymentBox">
+            <h3>Forma de pagamento</h3>
+            <p>As opções finais aparecem no Mercado Pago. Aqui você escolhe a intenção para seguir organizado.</p>
+
+            <div className="paymentMethods">
+              {methods.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className={method === item.id ? 'paymentMethod active' : 'paymentMethod'}
+                  onClick={() => setMethod(item.id)}
+                >
+                  <CreditCard size={18} />
+                  <span>
+                    <strong>{item.title}</strong>
+                    <small>{item.subtitle}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+
+            <div className="checkoutSecurity">
+              <ShieldCheck size={18} />
+              <span>Pagamento processado pelo Mercado Pago. A Go Viral não salva dados do cartão.</span>
+            </div>
+
+            <button className="primaryAction checkoutPayButton" disabled={loading} onClick={() => onConfirm(plan.id, method)}>
+              {loading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />}
+              Continuar para pagamento
+            </button>
+
+            <button type="button" className="ghost wide" disabled={loading} onClick={onClose}>
+              Voltar aos planos
+            </button>
+          </article>
+        </div>
+      </section>
+    </div>
   );
 }
 
@@ -663,6 +962,7 @@ function App() {
   const [billing, setBilling] = useState(null);
   const [plans, setPlans] = useState([]);
   const [affiliate, setAffiliate] = useState(null);
+  const [checkoutPlan, setCheckoutPlan] = useState(null);
   const [loading, setLoading] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState(null);
   const [form, setForm] = useState(createFormFromTemplate());
@@ -882,13 +1182,22 @@ function App() {
     }
   }
 
-  async function choosePlan(planId) {
+  function choosePlan(plan) {
+    setCheckoutPlan(plan);
+    window.location.hash = '#checkout';
+  }
+
+  async function confirmCheckout(planId, paymentMethod) {
     setLoading(true);
 
     try {
       const data = await apiFetch('/api/billing/checkout', {
         method: 'POST',
-        body: JSON.stringify({ planId, referralCode: new URLSearchParams(window.location.search).get('ref') || '' })
+        body: JSON.stringify({
+          planId,
+          paymentMethod,
+          referralCode: new URLSearchParams(window.location.search).get('ref') || ''
+        })
       });
 
       if (data.checkoutUrl) {
@@ -922,6 +1231,7 @@ function App() {
     setBilling(null);
     setPlans([]);
     setAffiliate(null);
+    setCheckoutPlan(null);
   }
 
   function pickTrigger(template) {
@@ -1393,6 +1703,13 @@ function App() {
           loading={loading}
           apiFetch={apiFetch}
           onRefresh={loadData}
+        />
+
+        <CheckoutModal
+          plan={checkoutPlan}
+          loading={loading}
+          onClose={() => setCheckoutPlan(null)}
+          onConfirm={confirmCheckout}
         />
 
         <AccountSettings
