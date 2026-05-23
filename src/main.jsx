@@ -1025,7 +1025,7 @@ function App() {
             <a className="menuItem" href="#planos" onClick={() => setMenuOpen(false)}><CreditCard size={15} /> Planos</a>
             <a className="menuItem" href="#afiliados" onClick={() => setMenuOpen(false)}><Gift size={15} /> Afiliados</a>
             <a className="menuItem" href="#configuracoes" onClick={() => setMenuOpen(false)}><Settings size={15} /> Conta</a>
-            <button type="button" className="menuItem" onClick={loadData} disabled={loading}>{loading ? <Loader2 className="spin" size={15} /> : <RefreshCw size={15} />} Atualizar dados</button>
+            <button type="button" className="menuItem" onClick={loadData} disabled={loading}>{loading ? <Loader2 className="spin" size={15} /> : <RefreshCw size={15} />} Sincronizar dados</button>
             <button type="button" className="menuItem logoutMenu" onClick={logout}><LogOut size={15} /> Sair</button>
           </nav>
         )}
@@ -1086,11 +1086,6 @@ function App() {
                     </button>
                   );
                 })}
-                <div className="templateCard disabledTemplate">
-                  <ShieldCheck size={18} />
-                  <strong>Novo seguidor</strong>
-                  <small>Desativado por segurança até a Meta entregar evento confiável de novo seguidor no webhook.</small>
-                </div>
               </div>
             </div>
 

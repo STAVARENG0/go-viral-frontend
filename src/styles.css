@@ -71,8 +71,8 @@ p { color: var(--muted); line-height: 1.55; }
   position: relative;
 }
 .logo {
-  width: 205px;
-  height: 205px;
+  width: 210px;
+  height: 210px;
   object-fit: contain;
   border-radius: 32px;
 }
