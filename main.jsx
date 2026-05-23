@@ -130,7 +130,11 @@ function statusLabel(status) {
     dm_option_sent: 'Resposta da opção enviada',
     ignored_no_dm_option: 'Direct sem opção',
     ignored_no_keyword: 'Sem palavra-chave',
-    ignored_missing_comment_data: 'Evento ignorado'
+    ignored_missing_comment_data: 'Evento ignorado',
+    ignored_self_comment: 'Comentário da própria conta',
+    sent_direct_fallback: 'Enviado por direct',
+    sent_direct_fallback_text: 'Enviado por direct em texto',
+    error_invalid_private_reply: 'Private reply recusado'
   };
   return map[status] || status || '—';
 }
@@ -669,6 +673,7 @@ function App() {
   const [checkingSession, setCheckingSession] = useState(true);
   const [rules, setRules] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [selectedAccountId, setSelectedAccountId] = useState(() => window.localStorage.getItem('gv_selected_instagram_account_id') || '');
   const [logs, setLogs] = useState([]);
   const [billing, setBilling] = useState(null);
   const [plans, setPlans] = useState([]);
@@ -683,8 +688,23 @@ function App() {
     () => triggerTemplates.find((template) => template.id === form.triggerType) || triggerTemplates[0],
     [form.triggerType]
   );
-  const mainAccount = accounts[0] || null;
+  const mainAccount = useMemo(() => {
+    if (!accounts.length) return null;
+    return (
+      accounts.find((account) => String(account.id) === String(selectedAccountId)) ||
+      accounts.find((account) => account.selected) ||
+      accounts[0]
+    );
+  }, [accounts, selectedAccountId]);
+
+  const accountLimits = billing?.limits || mainAccount?.limits || billing?.subscription || {};
+  const accountLimit = Number(accountLimits.instagramLimit || billing?.subscription?.instagramLimit || 1);
+  const automationLimit = Number(accountLimits.automationLimit || billing?.subscription?.automationLimit || 3);
   const activeRules = rules.filter((rule) => rule.active !== 0 && rule.active !== false);
+
+  function selectedAccountQuery(accountId = mainAccount?.id || selectedAccountId) {
+    return accountId ? `?accountId=${encodeURIComponent(accountId)}` : '';
+  }
 
   async function apiFetch(path, options = {}) {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -709,18 +729,37 @@ function App() {
     }
   }
 
-  async function loadData() {
+  async function loadData(preferredAccountId = selectedAccountId) {
     if (!user) return;
     setLoading(true);
     try {
-      const [rulesData, accountsData, logsData, billingData] = await Promise.all([
-        apiFetch('/api/rules'),
+      const [accountsData, billingData] = await Promise.all([
         apiFetch('/api/accounts'),
-        apiFetch('/api/logs'),
         apiFetch('/api/billing/status')
       ]);
+
+      const nextAccounts = Array.isArray(accountsData) ? accountsData : [];
+      const preferred = nextAccounts.find((account) => String(account.id) === String(preferredAccountId));
+      const selected = preferred || nextAccounts.find((account) => account.selected) || nextAccounts[0] || null;
+      const nextSelectedId = selected?.id ? String(selected.id) : '';
+
+      setAccounts(nextAccounts);
+      setSelectedAccountId(nextSelectedId);
+
+      if (nextSelectedId) {
+        window.localStorage.setItem('gv_selected_instagram_account_id', nextSelectedId);
+      } else {
+        window.localStorage.removeItem('gv_selected_instagram_account_id');
+      }
+
+      const [rulesData, logsData] = nextSelectedId
+        ? await Promise.all([
+            apiFetch(`/api/rules?accountId=${encodeURIComponent(nextSelectedId)}`),
+            apiFetch(`/api/logs?accountId=${encodeURIComponent(nextSelectedId)}`)
+          ])
+        : [[], []];
+
       setRules(Array.isArray(rulesData) ? rulesData : []);
-      setAccounts(Array.isArray(accountsData) ? accountsData : []);
       setLogs(Array.isArray(logsData) ? logsData : []);
       setBilling(billingData || null);
       setPlans(Array.isArray(billingData?.plans) ? billingData.plans : []);
@@ -752,6 +791,12 @@ function App() {
     const selectedPublicationMode = form.publicationMode || 'all';
     const selectedPublicationUrl = String(form.publicationUrl || '').trim();
     const normalizedOptions = cleanOptions(form.options);
+
+    if (!mainAccount) {
+      alert('Conecte ou selecione um Instagram antes de salvar a automação.');
+      return;
+    }
+
     const messageProblem = automationTextProblem(form.message, 'Mensagem inicial');
     const keyword = normalizeKeyword(form.keyword);
 
@@ -779,6 +824,7 @@ function App() {
     setLoading(true);
     try {
       const payload = {
+        accountId: mainAccount.id,
         triggerType: form.triggerType,
         title: form.title,
         strategy: form.strategy,
@@ -793,12 +839,12 @@ function App() {
       };
 
       if (editingRuleId) {
-        await apiFetch(`/api/rules/${editingRuleId}`, {
+        await apiFetch(`/api/rules/${editingRuleId}${selectedAccountQuery()}`, {
           method: 'PATCH',
           body: JSON.stringify(payload)
         });
       } else {
-        await apiFetch('/api/rules', {
+        await apiFetch(`/api/rules${selectedAccountQuery()}`, {
           method: 'POST',
           body: JSON.stringify(payload)
         });
@@ -838,12 +884,25 @@ function App() {
     if (!confirm('Excluir esta automação?')) return;
     setLoading(true);
     try {
-      await apiFetch(`/api/rules/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/rules/${id}${selectedAccountQuery()}`, { method: 'DELETE' });
       if (editingRuleId === id) {
         setEditingRuleId(null);
         setForm(createFormFromTemplate(selectedTemplate));
       }
       await loadData();
+    } catch (err) {
+      alert(err.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function selectInstagramAccount(accountId) {
+    if (!accountId || String(accountId) === String(mainAccount?.id || '')) return;
+    setLoading(true);
+    try {
+      await apiFetch(`/api/accounts/${accountId}/select`, { method: 'POST' });
+      await loadData(accountId);
     } catch (err) {
       alert(err.message);
     } finally {
@@ -863,10 +922,8 @@ function App() {
     setLoading(true);
     try {
       await apiFetch(`/api/accounts/${mainAccount.id}`, { method: 'DELETE' });
-      setAccounts([]);
-      setRules([]);
-      setLogs([]);
       alert('Instagram desconectado com sucesso.');
+      await loadData();
     } catch (err) {
       alert(err.message);
     } finally {
@@ -878,7 +935,7 @@ function App() {
     if (!confirm('Apagar todo o registro de atividades desta conta?')) return;
     setLoading(true);
     try {
-      await apiFetch('/api/logs', { method: 'DELETE' });
+      await apiFetch(`/api/logs${selectedAccountQuery()}`, { method: 'DELETE' });
       setLogs([]);
       alert('Registro de atividades apagado.');
       await loadData();
@@ -935,6 +992,7 @@ function App() {
     setPlans([]);
     setAffiliate(null);
     setCheckoutPlan(null);
+    window.localStorage.removeItem('gv_selected_instagram_account_id');
   }
 
   function pickTrigger(template) {
@@ -1030,34 +1088,70 @@ function App() {
           </nav>
         )}
 
-        <section className="profileHero" id="conta">
-          <InstagramAvatar account={mainAccount} />
-          <div className="profileInfo">
-            <span className="label"><Camera size={14} /> Perfil conectado</span>
-            <h2>{mainAccount ? `@${mainAccount.username}` : 'Nenhuma conta conectada'}</h2>
-            <p>
-              {mainAccount
-                ? mainAccount.biography || `Conectada em ${formatDate(mainAccount.connected_at)}`
-                : 'Conecte o Instagram antes de ativar suas automações.'}
-            </p>
-            {mainAccount?.connected_at && <p className="profileDate">Conectada em {formatDate(mainAccount.connected_at)}</p>}
-          </div>
-          <div className="profileActions">
-            <div className="statusBadge"><ShieldCheck size={16} /> {mainAccount ? 'Ativo' : 'Pendente'}</div>
-            <button type="button" className="instagramConnectButton" onClick={connectInstagram} disabled={loading}>
-              <Camera size={18} /> {mainAccount ? 'Trocar Instagram' : 'Conectar Instagram'}
-            </button>
-            {mainAccount && (
-              <button type="button" className="dangerText" onClick={disconnectInstagram} disabled={loading}>
-                <Trash2 size={18} /> Desconectar
+        <section className="profileHero accountDashboard" id="conta">
+          <div className="profileMain">
+            <InstagramAvatar account={mainAccount} />
+            <div className="profileInfo">
+              <span className="label"><Camera size={14} /> Conta ativa para automações</span>
+              <h2>{mainAccount ? `@${mainAccount.username}` : 'Nenhuma conta conectada'}</h2>
+              <p>
+                {mainAccount
+                  ? mainAccount.biography || `Tudo que você criar agora será salvo nessa conta.`
+                  : 'Conecte o Instagram antes de ativar suas automações.'}
+              </p>
+              {mainAccount?.connected_at && <p className="profileDate">Conectada em {formatDate(mainAccount.connected_at)}</p>}
+            </div>
+            <div className="profileActions">
+              <div className="statusBadge"><ShieldCheck size={16} /> {mainAccount ? 'Pronto para usar' : 'Pendente'}</div>
+              <button type="button" className="instagramConnectButton" onClick={connectInstagram} disabled={loading}>
+                <Camera size={18} /> Conectar nova conta
               </button>
-            )}
+              <small className="limitText">{accounts.length}/{accountLimit || '∞'} Instagrams no plano atual</small>
+              {mainAccount && (
+                <button type="button" className="dangerText" onClick={disconnectInstagram} disabled={loading}>
+                  <Trash2 size={18} /> Desconectar esta conta
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="accountSwitcher">
+            <div className="accountSwitcherHeader">
+              <strong>Contas conectadas</strong>
+              <span>Selecione onde criar e ver automações.</span>
+            </div>
+            <div className="accountChipGrid">
+              {accounts.map((account) => (
+                <button
+                  type="button"
+                  key={account.id}
+                  className={String(account.id) === String(mainAccount?.id) ? 'accountChip active' : 'accountChip'}
+                  onClick={() => selectInstagramAccount(account.id)}
+                  disabled={loading}
+                >
+                  <InstagramAvatar account={account} compact />
+                  <span>
+                    <strong>@{account.username}</strong>
+                    <small>{Number(account.activeRuleCount || account.active_rule_count || 0)} automações · {Number(account.logCount || account.log_count || 0)} chamadas</small>
+                  </span>
+                  {String(account.id) === String(mainAccount?.id) && <CheckCircle2 size={17} />}
+                </button>
+              ))}
+              {!accounts.length && (
+                <div className="setupHint">
+                  <strong>Comece conectando o Instagram.</strong>
+                  <span>Depois crie uma automação de comentário com palavra-chave.</span>
+                </div>
+              )}
+            </div>
           </div>
         </section>
 
-        <div className="grid cards twoCards">
-          <div className="metricCard"><Bot /><strong>{activeRules.length}</strong><span>Automações ativas</span></div>
-          <div className="metricCard"><MessageCircle /><strong>{logs.length}</strong><span>Chamadas registradas</span></div>
+        <div className="grid cards fourCards">
+          <div className="metricCard"><Camera /><strong>{accounts.length}</strong><span>Instagrams conectados</span></div>
+          <div className="metricCard"><Bot /><strong>{activeRules.length}</strong><span>Automações desta conta</span></div>
+          <div className="metricCard"><MessageCircle /><strong>{logs.length}</strong><span>Chamadas desta conta</span></div>
+          <div className="metricCard"><ShieldCheck /><strong>{automationLimit}</strong><span>Limite de automações</span></div>
         </div>
 
         <section className="mentalPanel" id="caminho">
@@ -1066,9 +1160,12 @@ function App() {
               <h2><Wand2 size={20} /> Caminho mental da automação</h2>
               <p>{editingRuleId ? 'Editando automação existente.' : 'Escolha o gatilho, edite a estratégia e salve o fluxo.'}</p>
             </div>
-            {editingRuleId && (
-              <button type="button" className="small ghost" onClick={cancelEdit} disabled={loading}><X size={16} /> Cancelar edição</button>
-            )}
+            <div className="panelHeaderActions">
+              {mainAccount && <span className="accountContextBadge"><Camera size={14} /> Salvando em @{mainAccount.username}</span>}
+              {editingRuleId && (
+                <button type="button" className="small ghost" onClick={cancelEdit} disabled={loading}><X size={16} /> Cancelar edição</button>
+              )}
+            </div>
           </div>
 
           <div className="pathGrid">
@@ -1096,6 +1193,17 @@ function App() {
                 Estratégia para {selectedTemplate.title.toLowerCase()}
                 <textarea value={form.strategy} onChange={(e) => setForm({ ...form, strategy: e.target.value })} />
               </label>
+              <div className="messageDesigner">
+                <div className="designerHeader">
+                  <strong>Mensagem principal</strong>
+                  <small>É isso que a pessoa recebe no direct.</small>
+                </div>
+                <textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} />
+                <div className="quickFields">
+                  <input placeholder="Nome do link" value={form.linkLabel} onChange={(e) => setForm({ ...form, linkLabel: e.target.value })} />
+                  <input placeholder="URL do link" value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })} />
+                </div>
+              </div>
               <div className="optionSummary">
                 <strong>Opções de resposta</strong>
                 <small>{form.options.length}/{MAX_OPTIONS} opções criadas</small>
@@ -1151,7 +1259,7 @@ function App() {
                 )}
               </div>
 
-              <label className="wide">Mensagem inicial<textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
+              <label className="wide">Mensagem inicial — igual ao designer acima<textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
               <label>Nome do link<input placeholder="Ex: Acessar agora" value={form.linkLabel} onChange={(e) => setForm({ ...form, linkLabel: e.target.value })} /></label>
               <label>URL do link<input placeholder="https://..." value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })} /></label>
 
