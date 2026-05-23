@@ -499,136 +499,111 @@ label { display: grid; gap: 8px; color: #111; font-weight: 900; }
   .rule { align-items: flex-start; flex-direction: column; }
 }
 
-/* Multi-contas e designer de mensagem — Go Viral Pro */
-.profileHero.accountDashboard {
-  display: grid;
-  align-items: stretch;
-  gap: 18px;
-}
-.profileMain {
+/* Ajustes finais Go Viral: mobile mais compacto, logo centralizada e direct com botões */
+.loginBrandBlock {
+  width: 100%;
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 18px;
-}
-.limitText {
-  color: var(--muted);
-  font-weight: 900;
   text-align: center;
 }
-.accountSwitcher {
-  border: 1px solid rgba(17,17,17,.08);
-  background: rgba(255,255,255,.68);
-  border-radius: 24px;
-  padding: 14px;
+.loginBrandBlock .logo {
+  display: block;
+  margin: 0 auto -6px;
 }
-.accountSwitcherHeader {
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  align-items: center;
-  margin-bottom: 12px;
+.loginBrandBlock .eyebrow {
+  margin: 0 auto 4px;
 }
-.accountSwitcherHeader strong { font-size: 16px; }
-.accountSwitcherHeader span { color: var(--muted); font-weight: 800; font-size: 13px; }
-.accountChipGrid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
-  gap: 10px;
+.loginBrandBlock h1,
+.loginBrandBlock p {
+  text-align: center;
 }
-.accountChip {
-  width: 100%;
-  min-height: 76px;
-  justify-content: flex-start;
-  border-radius: 20px;
-  padding: 12px;
-  color: #111;
+.brandText {
+  min-width: 0;
+}
+.botBubble button {
+  border-color: rgba(230,0,0,.2);
   background: #fff;
-  border: 1px solid rgba(17,17,17,.1);
-  box-shadow: 0 8px 20px rgba(0,0,0,.05);
-  text-align: left;
-}
-.accountChip:hover { transform: translateY(-1px); }
-.accountChip.active {
-  color: #fff;
-  border-color: var(--red);
-  background: linear-gradient(135deg, var(--red), var(--red-2));
-}
-.accountChip span {
-  display: grid;
-  gap: 2px;
-  flex: 1;
-}
-.accountChip small { color: inherit; opacity: .78; font-size: 12px; }
-.accountChip.active .avatar {
   color: #111;
-  background: #fff;
+  font-weight: 950;
 }
-.setupHint {
-  border: 1px dashed rgba(230,0,0,.32);
+.botBubble button:hover {
   background: rgba(230,0,0,.06);
-  border-radius: 20px;
-  padding: 18px;
-  display: grid;
-  gap: 4px;
+  transform: none;
 }
-.setupHint span { color: var(--muted); font-weight: 800; }
-.grid.cards.fourCards {
-  grid-template-columns: repeat(4, 1fr);
-}
-.panelHeaderActions {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-.accountContextBadge {
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  border-radius: 999px;
-  background: rgba(230,0,0,.08);
-  border: 1px solid rgba(230,0,0,.22);
-  color: #111;
-  padding: 9px 12px;
-  font-size: 13px;
-  font-weight: 900;
-}
-.messageDesigner {
-  margin-top: 12px;
-  display: grid;
-  gap: 10px;
-  border: 1px solid rgba(230,0,0,.16);
-  background: linear-gradient(145deg, rgba(255,255,255,.9), rgba(246,246,244,.96));
-  border-radius: 22px;
-  padding: 14px;
-}
-.designerHeader {
-  display: flex;
-  justify-content: space-between;
-  gap: 10px;
-  align-items: center;
-}
-.designerHeader small {
+.formGrid label small {
   color: var(--muted);
   font-weight: 800;
+  line-height: 1.4;
 }
-.messageDesigner textarea { min-height: 140px; }
-.quickFields {
-  display: grid;
-  grid-template-columns: 1fr 1.4fr;
-  gap: 10px;
-}
-.rule span.ruleAccount {
-  color: var(--red);
-}
-@media (max-width: 980px) {
-  .grid.cards.fourCards { grid-template-columns: repeat(2, 1fr); }
-  .profileMain { align-items: flex-start; flex-direction: column; }
-  .profileActions { width: 100%; }
-}
-@media (max-width: 620px) {
-  .grid.cards.fourCards { grid-template-columns: 1fr; }
-  .accountSwitcherHeader { display: grid; }
-  .quickFields { grid-template-columns: 1fr; }
+
+@media (max-width: 640px) {
+  .loginPage { align-items: start; padding-top: 18px; }
+  .loginCard {
+    width: min(100%, 430px);
+    padding: 24px 18px;
+    border-radius: 30px;
+  }
+  .loginBrandBlock .logo {
+    width: 188px;
+    height: 188px;
+    margin-bottom: -12px;
+  }
+  .loginBrandBlock .eyebrow {
+    font-size: 12px;
+    padding: 7px 12px;
+  }
+  .loginBrandBlock h1 {
+    font-size: clamp(58px, 16vw, 76px);
+    margin: 10px 0 4px;
+  }
+  .loginBrandBlock p {
+    margin: 0 auto 4px;
+    max-width: 310px;
+  }
+  .siteFrame {
+    padding: 14px;
+    border-radius: 30px;
+  }
+  .siteHeader {
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    gap: 8px;
+    padding: 2px 0 14px;
+  }
+  .brandTop {
+    width: 100%;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+  }
+  .brandLogoSmall {
+    width: 148px;
+    height: 148px;
+    margin: 0 auto -12px;
+  }
+  .brandText h1 {
+    font-size: clamp(58px, 18vw, 82px);
+    margin: 6px 0 2px;
+  }
+  .brandText p {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 800;
+  }
+  .menuToggle {
+    margin: 14px auto 0;
+    min-width: 190px;
+    justify-content: center;
+  }
+  .topMenu {
+    margin-top: 0;
+    text-align: center;
+  }
+  .profileHero {
+    margin-top: 6px;
+  }
 }
