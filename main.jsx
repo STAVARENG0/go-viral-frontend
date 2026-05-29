@@ -52,6 +52,15 @@ const triggerTemplates = [
     message: 'Oi! Escolha uma opção abaixo para eu te ajudar agora.',
     description: 'Responda quando a pessoa chamar no direct ou enviar uma palavra-chave.',
     strategy: 'Identificar a intenção da pessoa no direct, oferecer opções simples e encaminhar para atendimento, venda ou conteúdo.'
+  },
+  {
+    id: 'welcome_contact',
+    icon: Sparkles,
+    title: 'Boas-vindas',
+    keyword: 'boas vindas',
+    message: 'Oi! Que bom te ver por aqui. Escolha uma opção abaixo para eu te ajudar.',
+    description: 'Receba a pessoa no primeiro comentário/direct quando não houver outra palavra-chave.',
+    strategy: 'Dar boas-vindas ao novo contato na primeira interação, apresentar opções simples e levar a pessoa para uma conversa útil.'
   }
 ];
 
@@ -69,7 +78,7 @@ function createFormFromTemplate(template = triggerTemplates[0]) {
     strategy: template.strategy,
     keyword: template.keyword,
     message: template.message,
-    linkLabel: template.id === 'comment_keyword' ? 'Acessar agora' : '',
+    linkLabel: template.id === 'comment_keyword' || template.id === 'welcome_contact' ? 'Acessar agora' : '',
     linkUrl: '',
     publicationMode: 'all',
     publicationUrl: '',
@@ -133,17 +142,33 @@ function statusLabel(status) {
     dm_option_sent_text: 'Resposta digitada enviada',
     ignored_no_dm_option: 'Direct sem opção',
     ignored_no_keyword: 'Sem palavra-chave',
-    ignored_missing_comment_data: 'Evento ignorado'
+    ignored_missing_comment_data: 'Evento ignorado',
+    welcome_sent: 'Boas-vindas enviada',
+    welcome_sent_quick_replies: 'Boas-vindas com botões',
+    welcome_sent_text: 'Boas-vindas em texto',
+    sent_direct_fallback: 'DM enviada por fallback',
+    sent_direct_fallback_text: 'DM fallback em texto',
+    error_invalid_private_reply: 'Comentário recusado pela Meta'
   };
   return map[status] || status || '—';
 }
 
 function statusIcon(status) {
-  if (['sent', 'sent_quick_replies', 'sent_text_fallback', 'dm_flow_sent', 'dm_quick_replies_sent', 'dm_option_sent', 'dm_option_sent_text'].includes(status)) {
+  if (['sent', 'sent_quick_replies', 'sent_text_fallback', 'dm_flow_sent', 'dm_quick_replies_sent', 'dm_option_sent', 'dm_option_sent_text', 'welcome_sent', 'welcome_sent_quick_replies', 'welcome_sent_text', 'sent_direct_fallback', 'sent_direct_fallback_text'].includes(status)) {
     return <CheckCircle2 size={16} />;
   }
   if (status === 'error') return <XCircle size={16} />;
   return <Activity size={16} />;
+}
+
+
+function statusTriggerLabel(triggerType) {
+  const map = {
+    comment_keyword: 'Comentário com palavra-chave',
+    dm_keyword: 'Direct com palavra-chave',
+    welcome_contact: 'Boas-vindas no primeiro contato'
+  };
+  return map[triggerType] || triggerType || 'Automação';
 }
 
 function InstagramAvatar({ account, compact = false }) {
@@ -520,6 +545,7 @@ function BillingPanel({ billing, plans, loading, onChoosePlan }) {
             <h3>{plan.name}</h3>
             <strong>{plan.priceLabel}</strong>
             <small>Afiliado ganha {plan.affiliateCommissionLabel}</small>
+            {plan.affiliateDiscountPercent > 0 && <small className="discountLine">Cupom de indicação dá {plan.affiliateDiscountPercent}% de desconto.</small>}
             <ul>
               {plan.features.map((feature) => <li key={feature}><CheckCircle2 size={14} /> {feature}</li>)}
             </ul>
@@ -531,50 +557,82 @@ function BillingPanel({ billing, plans, loading, onChoosePlan }) {
   );
 }
 
-function CheckoutModal({ plan, loading, onClose, onConfirm }) {
-  const [method, setMethod] = useState('pix');
+function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
+  const [referralCode, setReferralCode] = useState(() => new URLSearchParams(window.location.search).get('ref') || '');
+  const [preview, setPreview] = useState(null);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    setReferralCode(new URLSearchParams(window.location.search).get('ref') || '');
+    setPreview(null);
+  }, [plan?.id]);
+
   if (!plan) return null;
 
-  const methods = [
-    { id: 'pix', title: 'Pix', subtitle: 'Liberação rápida depois da confirmação.' },
-    { id: 'card', title: 'Cartão de crédito', subtitle: 'Pagamento seguro no ambiente Mercado Pago.' },
-    { id: 'boleto', title: 'Boleto', subtitle: 'Disponível conforme análise do Mercado Pago.' }
-  ];
+  const discountPercent = Number(preview?.pricing?.discountPercent ?? plan.affiliateDiscountPercent ?? affiliate?.discountPercent ?? 0);
+  const finalLabel = preview?.pricing?.finalLabel || preview?.pricing?.amountLabel || (referralCode && plan.couponPriceLabel ? plan.couponPriceLabel : plan.priceLabel);
+  const originalLabel = preview?.pricing?.originalPriceLabel || preview?.pricing?.originalLabel || plan.priceLabel;
+  const hasDiscount = Boolean(preview?.validReferral && discountPercent > 0);
+
+  async function validateCoupon() {
+    if (!referralCode.trim()) {
+      setPreview(null);
+      return;
+    }
+
+    setChecking(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/billing/referral-preview`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ planId: plan.id, referralCode })
+      });
+      const data = await parseJsonResponse(res);
+      setPreview(data);
+    } catch (error) {
+      setPreview({ validReferral: false, error: error.message });
+    } finally {
+      setChecking(false);
+    }
+  }
 
   return (
-    <div className="checkoutOverlay" role="dialog" aria-modal="true">
+    <div className="checkoutOverlay" role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && !loading && onClose()}>
       <section className="checkoutSheet glassCard">
         <button type="button" className="checkoutClose" onClick={onClose} disabled={loading} aria-label="Fechar checkout"><X size={18} /></button>
-        <div className="checkoutHeader">
-          <span className="eyebrow"><ShieldCheck size={14} /> Checkout seguro</span>
-          <h2>Finalize seu plano {plan.name}</h2>
-          <p>Confira o plano, escolha a forma de pagamento e continue no Mercado Pago para concluir com segurança.</p>
+        <div className="checkoutHeader centeredCheckoutHeader">
+          <span className="eyebrow"><ShieldCheck size={14} /> Checkout Mercado Pago</span>
+          <h2>Plano {plan.name}</h2>
+          <p>Você confirma o plano aqui e finaliza com segurança no Mercado Pago. Pix, cartão e outros métodos aparecem lá conforme sua conta.</p>
         </div>
-        <div className="checkoutGrid">
-          <article className="checkoutSummary">
+
+        <div className="checkoutGrid checkoutGridClean">
+          <article className="checkoutSummary checkoutSummaryHighlight">
             {plan.highlighted && <span className="bestBadge">Mais escolhido</span>}
             <h3>{plan.name}</h3>
-            <strong>{plan.priceLabel}</strong>
-            <small>Renovação mensal. Você pode cancelar quando quiser.</small>
+            {hasDiscount ? <small className="oldPrice">De {originalLabel}</small> : null}
+            <strong>{finalLabel}</strong>
+            <small>Assinatura mensal. Você pode cancelar quando quiser.</small>
             <ul>
               {plan.features.map((feature) => <li key={feature}><CheckCircle2 size={14} /> {feature}</li>)}
             </ul>
-            <div className="affiliateCheckoutNote"><Gift size={17} /> <span>Indicação deste plano gera {plan.affiliateCommissionLabel} para o afiliado após confirmação e liberação.</span></div>
+            <div className="affiliateCheckoutNote"><Gift size={17} /> <span>Afiliado recebe {plan.affiliateCommissionLabel} após o prazo de segurança.</span></div>
           </article>
-          <article className="paymentBox">
-            <h3>Forma de pagamento</h3>
-            <p>As opções finais aparecem no Mercado Pago. Aqui você escolhe a intenção para seguir organizado.</p>
-            <div className="paymentMethods">
-              {methods.map((item) => (
-                <button key={item.id} type="button" className={method === item.id ? 'paymentMethod active' : 'paymentMethod'} onClick={() => setMethod(item.id)}>
-                  <CreditCard size={18} />
-                  <span><strong>{item.title}</strong><small>{item.subtitle}</small></span>
-                </button>
-              ))}
+
+          <article className="paymentBox checkoutActionBox">
+            <h3>Cupom de indicação</h3>
+            <p>Use o cupom/link do afiliado. Ele registra a indicação e, se o desconto estiver ativo, aplica no valor mensal.</p>
+            <div className="couponInline">
+              <input value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} placeholder="Ex: MATHEUS123" />
+              <button type="button" className="ghost" onClick={validateCoupon} disabled={loading || checking}>{checking ? <Loader2 className="spin" size={16} /> : <Gift size={16} />} Validar</button>
             </div>
-            <div className="checkoutSecurity"><ShieldCheck size={18} /> <span>Pagamento processado pelo Mercado Pago. A Go Viral não salva dados do cartão.</span></div>
-            <button type="button" className="primaryAction checkoutPayButton" disabled={loading} onClick={() => onConfirm(plan.id, method)}>
-              {loading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />} Continuar para pagamento
+            {preview?.validReferral && <div className="couponStatus success"><CheckCircle2 size={16} /> Cupom válido {preview.affiliateName ? `de ${preview.affiliateName}` : ''}.</div>}
+            {preview && !preview.validReferral && <div className="couponStatus error"><XCircle size={16} /> {preview.error || 'Cupom inválido ou não permitido para esta conta.'}</div>}
+
+            <div className="checkoutSecurity"><ShieldCheck size={18} /> <span>A Go Viral não salva dados de cartão. O Mercado Pago processa a cobrança recorrente mensal.</span></div>
+            <button type="button" className="primaryAction checkoutPayButton" disabled={loading || checking} onClick={() => onConfirm(plan.id, 'mercado_pago', referralCode)}>
+              {loading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />} Continuar para Mercado Pago
             </button>
             <button type="button" className="ghost wide" disabled={loading} onClick={onClose}>Voltar aos planos</button>
           </article>
@@ -646,14 +704,14 @@ function AffiliatePanel({ affiliate, loading, apiFetch, onRefresh }) {
       <div className="panelHeader">
         <div>
           <h2><Gift size={20} /> Afiliados e indicação</h2>
-          <p>Divulgue seu link, indique clientes e acumule comissão para sacar via Pix.</p>
+          <p>Divulgue seu link, indique clientes e acumule comissão para sacar via Pix. O saldo fica pendente durante o prazo de segurança contra reembolso.</p>
         </div>
       </div>
       <div className="affiliateStats">
         <div><small>Saldo pendente</small><strong>{affiliate?.pendingLabel || 'R$ 0,00'}</strong></div>
         <div><small>Saldo liberado</small><strong>{affiliate?.availableLabel || 'R$ 0,00'}</strong></div>
+        <div><small>Em saque</small><strong>{affiliate?.requestedLabel || 'R$ 0,00'}</strong></div>
         <div><small>Total recebido</small><strong>{affiliate?.paidLabel || 'R$ 0,00'}</strong></div>
-        <div><small>Indicados</small><strong>{affiliate?.totalReferrals || 0}</strong></div>
       </div>
       <div className="formGrid">
         <label>Seu cupom/código<input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} /></label>
@@ -663,6 +721,7 @@ function AffiliatePanel({ affiliate, loading, apiFetch, onRefresh }) {
         <label className="wide">Chave Pix para saque<input value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" /></label>
         <button type="button" onClick={savePix} disabled={loading}><Save size={18} /> Salvar Pix</button>
         <button type="button" className="primaryAction" onClick={requestPayout} disabled={loading}><DollarSign size={18} /> Solicitar saque</button>
+        <div className="wide affiliateHelp"><ShieldCheck size={17} /> Comissão fica pendente por {affiliate?.holdDays || 7} dias para cobrir reembolso/disputa. Saque mínimo: {affiliate?.minPayoutLabel || 'R$ 50,00'}.</div>
       </div>
     </section>
   );
@@ -758,9 +817,10 @@ function App() {
     const selectedPublicationUrl = String(form.publicationUrl || '').trim();
     const normalizedOptions = cleanOptions(form.options);
     const messageProblem = automationTextProblem(form.message, 'Mensagem inicial');
-    const keyword = normalizeKeyword(form.keyword);
+    const isWelcomeTrigger = form.triggerType === 'welcome_contact';
+    const keyword = isWelcomeTrigger ? normalizeKeyword(form.keyword || 'boas vindas') : normalizeKeyword(form.keyword);
 
-    if (!keyword) {
+    if (!keyword && !isWelcomeTrigger) {
       alert('Digite a palavra-chave da automação.');
       return;
     }
@@ -776,7 +836,7 @@ function App() {
         return;
       }
     }
-    if (selectedPublicationMode === 'single' && !selectedPublicationUrl) {
+    if (!isWelcomeTrigger && selectedPublicationMode === 'single' && !selectedPublicationUrl) {
       alert('Cole o link da publicação antes de salvar.');
       return;
     }
@@ -791,8 +851,8 @@ function App() {
         message: String(form.message || '').trim(),
         linkLabel: form.linkLabel,
         linkUrl: form.linkUrl,
-        publicationMode: selectedPublicationMode,
-        publicationUrl: selectedPublicationUrl,
+        publicationMode: isWelcomeTrigger ? 'all' : selectedPublicationMode,
+        publicationUrl: isWelcomeTrigger ? '' : selectedPublicationUrl,
         active: form.active,
         options: normalizedOptions
       };
@@ -898,7 +958,7 @@ function App() {
     setCheckoutPlan(plan);
   }
 
-  async function confirmCheckout(planId, paymentMethod) {
+  async function confirmCheckout(planId, paymentMethod, referralCode = '') {
     setLoading(true);
     try {
       const data = await apiFetch('/api/billing/checkout', {
@@ -906,7 +966,7 @@ function App() {
         body: JSON.stringify({
           planId,
           paymentMethod,
-          referralCode: new URLSearchParams(window.location.search).get('ref') || ''
+          referralCode: referralCode || new URLSearchParams(window.location.search).get('ref') || ''
         })
       });
 
@@ -1139,9 +1199,13 @@ function App() {
             <summary>Configuração da automação</summary>
             <div className="formGrid">
               <label>Título do fluxo<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
-              <label>Palavra-chave<input value={form.keyword} onChange={(e) => setForm({ ...form, keyword: e.target.value })} /></label>
+              {form.triggerType !== 'welcome_contact' ? (
+                <label>Palavra-chave<input value={form.keyword} onChange={(e) => setForm({ ...form, keyword: e.target.value })} /></label>
+              ) : (
+                <div className="welcomeInfo"><Sparkles size={18} /><span>Boas-vindas dispara na primeira interação quando nenhum comentário/direct bate em outra palavra-chave.</span></div>
+              )}
 
-              <div className="wide automationScopeBox">
+              {form.triggerType !== 'welcome_contact' && <div className="wide automationScopeBox">
                 <div className="automationScopeHeader"><MessageCircle size={17} /> Publicações que vão ativar esta automação</div>
                 <div className="automationScopeChoices">
                   <button type="button" className={(form.publicationMode || 'all') === 'all' ? 'scopeChoice active' : 'scopeChoice'} onClick={() => setForm({ ...form, publicationMode: 'all', publicationUrl: '' })}>
@@ -1156,7 +1220,7 @@ function App() {
                 {form.publicationMode === 'single' && (
                   <label>Link da publicação<input placeholder="https://www.instagram.com/p/..." value={form.publicationUrl} onChange={(e) => setForm({ ...form, publicationUrl: e.target.value })} /></label>
                 )}
-              </div>
+              </div>}
 
               <label className="wide">Mensagem inicial <small>Nos comentários, o Instagram recebe primeiro uma private reply. Quando permitido, os botões aparecem como respostas rápidas.</small><textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
               <label>Nome do link<input placeholder="Ex: Acessar agora" value={form.linkLabel} onChange={(e) => setForm({ ...form, linkLabel: e.target.value })} /></label>
@@ -1195,6 +1259,7 @@ function App() {
                   <p>{rule.message}</p>
                   {rule.strategy && <p>{rule.strategy}</p>}
                   <span><ArrowRight size={14} /> {rule.options?.length || 0} opções configuradas</span>
+                  <span><Sparkles size={14} /> {statusTriggerLabel(rule.triggerType || rule.trigger_type)}</span>
                   <span className="ruleScope"><MessageCircle size={14} /> {(rule.publicationMode || rule.publication_mode) === 'single' ? `Somente uma publicação${(rule.publicationUrl || rule.publication_url) ? `: ${rule.publicationUrl || rule.publication_url}` : ''}` : 'Todas as publicações'}</span>
                   {rule.link_url && <span><LinkIcon size={14} /> {rule.link_label || 'Acessar aqui'}: {rule.link_url}</span>}
                 </div>
@@ -1231,7 +1296,7 @@ function App() {
 
         <BillingPanel billing={billing} plans={plans} loading={loading} onChoosePlan={choosePlan} />
         <AffiliatePanel affiliate={affiliate} loading={loading} apiFetch={apiFetch} onRefresh={loadData} />
-        <CheckoutModal plan={checkoutPlan} loading={loading} onClose={() => setCheckoutPlan(null)} onConfirm={confirmCheckout} />
+        <CheckoutModal plan={checkoutPlan} loading={loading} onClose={() => setCheckoutPlan(null)} onConfirm={confirmCheckout} affiliate={affiliate} />
         <AccountSettings user={user} loading={loading} apiFetch={apiFetch} onUserUpdated={setUser} />
       </section>
     </main>
