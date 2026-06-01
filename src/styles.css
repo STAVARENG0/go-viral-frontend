@@ -850,3 +850,10 @@ label { display: grid; gap: 8px; color: #111; font-weight: 900; }
     position: static;
   }
 }
+.buttonLimitNote {
+  display: block;
+  color: var(--muted);
+  font-size: .82rem;
+  text-align: center;
+  margin-top: -6px;
+}

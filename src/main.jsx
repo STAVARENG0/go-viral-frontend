@@ -64,11 +64,12 @@ const triggerTemplates = [
   }
 ];
 
-function defaultOption() {
+function defaultOption(index = 0) {
+  const labels = ['Saber mais', 'Quero o link', 'Agendar'];
   return {
-    label: 'Saber mais',
+    label: labels[index] || `Opção ${index + 1}`,
     actionType: 'response',
-    response: 'Perfeito! Vou te mandar o próximo passo agora.',
+    response: '',
     linkLabel: 'Acessar agora',
     linkUrl: ''
   };
@@ -86,7 +87,7 @@ function createFormFromTemplate(template = triggerTemplates[0]) {
     publicationMode: 'all',
     publicationUrl: '',
     active: true,
-    options: [defaultOption()]
+    options: [defaultOption(0)]
   };
 }
 
@@ -825,6 +826,11 @@ function App() {
     const isWelcomeTrigger = form.triggerType === 'welcome_contact';
     const keyword = isWelcomeTrigger ? normalizeKeyword(form.keyword || 'boas vindas') : normalizeKeyword(form.keyword);
 
+    if (!normalizedOptions.length) {
+      alert('Adicione pelo menos um botão com mensagem ou link.');
+      return;
+    }
+
     if (!keyword && !isWelcomeTrigger) {
       alert('Digite a palavra-chave da automação.');
       return;
@@ -909,7 +915,15 @@ function App() {
       publicationMode: rule.publicationMode || rule.publication_mode || 'all',
       publicationUrl: rule.publicationUrl || rule.publication_url || '',
       active: rule.active !== 0 && rule.active !== false,
-      options: Array.isArray(rule.options) && rule.options.length ? rule.options.slice(0, MAX_OPTIONS) : [defaultOption()]
+      options: Array.isArray(rule.options) && rule.options.length
+        ? rule.options.slice(0, MAX_OPTIONS).map((option, index) => ({
+          label: option.label || `Botão ${index + 1}`,
+          actionType: option.actionType || option.action_type || (option.linkUrl || option.link_url ? (option.response ? 'both' : 'link') : 'response'),
+          response: option.response || '',
+          linkLabel: option.linkLabel || option.link_label || 'Acessar agora',
+          linkUrl: option.linkUrl || option.link_url || ''
+        }))
+        : [defaultOption(0)]
     });
     window.location.hash = '#caminho';
   }
@@ -1046,7 +1060,7 @@ function App() {
   function addOption() {
     setForm((prev) => {
       if (prev.options.length >= MAX_OPTIONS) return prev;
-      return { ...prev, options: [...prev.options, defaultOption()] };
+      return { ...prev, options: [...prev.options, defaultOption(prev.options.length)] };
     });
   }
 
@@ -1157,8 +1171,8 @@ function App() {
         <section className="mentalPanel" id="caminho">
           <div className="panelHeader">
             <div>
-              <h2><Wand2 size={20} /> Caminho mental da automação</h2>
-              <p>{editingRuleId ? 'Editando automação existente.' : 'Escolha o gatilho, edite a estratégia e salve o fluxo.'}</p>
+              <h2><Wand2 size={20} /> Montar automação</h2>
+              <p>{editingRuleId ? 'Editando automação existente.' : 'Escolha quando começa, escreva a mensagem e adicione os botões.'}</p>
             </div>
             {editingRuleId && (
               <button type="button" className="small ghost" onClick={cancelEdit} disabled={loading}><X size={16} /> Cancelar edição</button>
@@ -1215,11 +1229,11 @@ function App() {
                 </div>
               )}
 
-              <label className="messageBox">Mensagem que chega primeiro<textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
+              <label className="messageBox">Mensagem que a pessoa recebe<textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
 
               <div className="optionSummary">
                 <strong>Botões</strong>
-                <small>{form.options.length}/{MAX_OPTIONS}</small>
+                <small>{form.options.length}/{MAX_OPTIONS} no modelo bonito</small>
               </div>
 
               <div className="cleanOptionsList">
@@ -1237,7 +1251,7 @@ function App() {
                       <label>Nome do botão<input placeholder="Ex: Quero o link" value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={20} /></label>
 
                       <div className="actionChoiceBlock">
-                        <strong>Quando clicar, faz o quê?</strong>
+                        <strong>Depois do clique</strong>
                         <div className="actionChoiceRow">
                           <button type="button" className={actionType === 'response' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(index, 'response')}>Mensagem</button>
                           <button type="button" className={actionType === 'link' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(index, 'link')}>Link</button>
@@ -1246,7 +1260,7 @@ function App() {
                       </div>
 
                       {showResponse && (
-                        <label>Mensagem depois do clique<textarea placeholder="Ex: Perfeito! Vou te explicar agora." value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
+                        <label>Mensagem que vai enviar<textarea placeholder="Ex: Perfeito! Vou te explicar agora." value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
                       )}
 
                       {showLink && (
@@ -1261,6 +1275,7 @@ function App() {
               </div>
 
               <button type="button" className="wide ghost addButtonSimple" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}><Plus size={18} /> Adicionar botão</button>
+              {form.options.length >= MAX_OPTIONS && <small className="buttonLimitNote">Esse formato do Instagram mostra no máximo 3 botões bonitos na mesma mensagem.</small>}
             </div>
 
             <div className="pathColumn previewColumn stickyPreview">
@@ -1279,7 +1294,7 @@ function App() {
                 </div>
                 <div className="bubble userBubble">{form.options[0]?.label || 'Saber mais'}</div>
                 <div className="bubble botBubble smallBubble">
-                  <p>{form.options[0]?.response || 'Resposta automática da opção escolhida.'}</p>
+                  <p>{form.options[0]?.response || (form.options[0]?.linkUrl ? 'Toque no botão abaixo para acessar.' : 'Aqui aparece a resposta desse botão.')}</p>
                   {form.options[0]?.linkUrl && <button type="button">{form.options[0]?.linkLabel || 'Acessar agora'}</button>}
                 </div>
               </div>
