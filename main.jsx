@@ -64,10 +64,12 @@ const triggerTemplates = [
   }
 ];
 
-function defaultOption() {
+function defaultOption(index = 0) {
+  const labels = ['Saber mais', 'Quero o link', 'Agendar'];
   return {
-    label: 'Quero o link',
-    response: 'Perfeito! Vou te mandar o próximo passo agora.',
+    label: labels[index] || `Opção ${index + 1}`,
+    actionType: 'response',
+    response: '',
     linkLabel: 'Acessar agora',
     linkUrl: ''
   };
@@ -85,7 +87,7 @@ function createFormFromTemplate(template = triggerTemplates[0]) {
     publicationMode: 'all',
     publicationUrl: '',
     active: true,
-    options: [defaultOption()]
+    options: [defaultOption(0)]
   };
 }
 
@@ -130,15 +132,6 @@ function isPlaceholderOption(option) {
   const label = normalizeKeyword(option?.label);
   const response = normalizeKeyword(option?.response);
   return label === 'nova opcao' || response === 'digite aqui a resposta automatica desta opcao' || response === 'digite aqui';
-}
-
-function optionPreviewText(option) {
-  const parts = [String(option?.response || 'Resposta automática da opção escolhida.').trim()];
-  const url = String(option?.linkUrl || '').trim();
-  if (url) {
-    parts.push(`🔗 ${String(option?.linkLabel || 'Acessar agora').trim()}: ${url}`);
-  }
-  return parts.filter(Boolean).join('\n\n');
 }
 
 function statusLabel(status) {
@@ -817,12 +810,12 @@ function App() {
     return (options || [])
       .slice(0, MAX_OPTIONS)
       .map((option) => ({
-        label: String(option.label || '').trim(),
+        label: String(option.label || '').trim().slice(0, 20),
         response: String(option.response || '').trim(),
-        linkLabel: String(option.linkLabel || '').trim(),
-        linkUrl: String(option.linkUrl || '').trim()
+        linkLabel: String(option.linkLabel || option.link_label || 'Acessar agora').trim(),
+        linkUrl: String(option.linkUrl || option.link_url || '').trim()
       }))
-      .filter((option) => option.label && option.response && !isPlaceholderOption(option));
+      .filter((option) => option.label && (option.response || option.linkUrl) && !isPlaceholderOption(option));
   }
 
   async function saveRule() {
@@ -832,6 +825,11 @@ function App() {
     const messageProblem = automationTextProblem(form.message, 'Mensagem inicial');
     const isWelcomeTrigger = form.triggerType === 'welcome_contact';
     const keyword = isWelcomeTrigger ? normalizeKeyword(form.keyword || 'boas vindas') : normalizeKeyword(form.keyword);
+
+    if (!normalizedOptions.length) {
+      alert('Adicione pelo menos um botão com mensagem ou link.');
+      return;
+    }
 
     if (!keyword && !isWelcomeTrigger) {
       alert('Digite a palavra-chave da automação.');
@@ -843,14 +841,20 @@ function App() {
     }
     for (const option of normalizedOptions) {
       const labelProblem = automationTextProblem(option.label, 'Texto do botão');
-      const responseProblem = automationTextProblem(option.response, 'Resposta do botão');
-      if (labelProblem || responseProblem) {
-        alert(labelProblem || responseProblem);
+      if (labelProblem) {
+        alert(labelProblem);
         return;
       }
-      if (option.linkUrl && !/^https?:\/\//i.test(option.linkUrl)) {
-        alert('O link da opção precisa começar com http:// ou https://');
+      if (!option.response && !option.linkUrl) {
+        alert('Cada opção precisa ter uma resposta, um link, ou os dois.');
         return;
+      }
+      if (option.response) {
+        const responseProblem = automationTextProblem(option.response, 'Resposta do botão');
+        if (responseProblem) {
+          alert(responseProblem);
+          return;
+        }
       }
     }
     if (!isWelcomeTrigger && selectedPublicationMode === 'single' && !selectedPublicationUrl) {
@@ -912,13 +916,14 @@ function App() {
       publicationUrl: rule.publicationUrl || rule.publication_url || '',
       active: rule.active !== 0 && rule.active !== false,
       options: Array.isArray(rule.options) && rule.options.length
-        ? rule.options.slice(0, MAX_OPTIONS).map((option) => ({
-          label: option.label || '',
+        ? rule.options.slice(0, MAX_OPTIONS).map((option, index) => ({
+          label: option.label || `Botão ${index + 1}`,
+          actionType: option.actionType || option.action_type || (option.linkUrl || option.link_url ? (option.response ? 'both' : 'link') : 'response'),
           response: option.response || '',
           linkLabel: option.linkLabel || option.link_label || 'Acessar agora',
           linkUrl: option.linkUrl || option.link_url || ''
         }))
-        : [defaultOption()]
+        : [defaultOption(0)]
     });
     window.location.hash = '#caminho';
   }
@@ -1040,10 +1045,22 @@ function App() {
     }));
   }
 
+  function updateOptionAction(index, value) {
+    setForm((prev) => ({
+      ...prev,
+      options: prev.options.map((option, optionIndex) => {
+        if (optionIndex !== index) return option;
+        if (value === 'link') return { ...option, actionType: value, response: '' };
+        if (value === 'response') return { ...option, actionType: value, linkUrl: '' };
+        return { ...option, actionType: value };
+      })
+    }));
+  }
+
   function addOption() {
     setForm((prev) => {
       if (prev.options.length >= MAX_OPTIONS) return prev;
-      return { ...prev, options: [...prev.options, defaultOption()] };
+      return { ...prev, options: [...prev.options, defaultOption(prev.options.length)] };
     });
   }
 
@@ -1154,15 +1171,15 @@ function App() {
         <section className="mentalPanel" id="caminho">
           <div className="panelHeader">
             <div>
-              <h2><Wand2 size={20} /> Caminho mental da automação</h2>
-              <p>{editingRuleId ? 'Editando automação existente.' : 'Escolha o gatilho, edite a estratégia e salve o fluxo.'}</p>
+              <h2><Wand2 size={20} /> Montar automação</h2>
+              <p>{editingRuleId ? 'Editando automação existente.' : 'Escolha quando começa, escreva a mensagem e adicione os botões.'}</p>
             </div>
             {editingRuleId && (
               <button type="button" className="small ghost" onClick={cancelEdit} disabled={loading}><X size={16} /> Cancelar edição</button>
             )}
           </div>
 
-          <div className="pathGrid">
+          <div className="pathGrid cleanPathGrid">
             <div className="pathColumn">
               <span className="stepNumber">1</span>
               <h3>Quando começa?</h3>
@@ -1178,29 +1195,92 @@ function App() {
                   );
                 })}
               </div>
-            </div>
 
-            <div className="pathColumn">
-              <span className="stepNumber">2</span>
-              <h3>Estratégia editável</h3>
-              <label className="strategyEditor">
-                Estratégia para {selectedTemplate.title.toLowerCase()}
-                <textarea value={form.strategy} onChange={(e) => setForm({ ...form, strategy: e.target.value })} />
-              </label>
-              <div className="optionSummary">
-                <strong>Opções de resposta</strong>
-                <small>{form.options.length}/{MAX_OPTIONS} opções criadas</small>
+              <div className="simpleFields">
+                <label>Nome do fluxo<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
+                {form.triggerType !== 'welcome_contact' ? (
+                  <label>Palavra-chave<input value={form.keyword} onChange={(e) => setForm({ ...form, keyword: e.target.value })} /></label>
+                ) : (
+                  <div className="welcomeInfo"><Sparkles size={18} /><span>Boas-vindas só dispara quando a pessoa já interagir com comentário ou direct.</span></div>
+                )}
               </div>
-              <button type="button" className="templateCard addOptionCard" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}>
-                <Plus size={18} />
-                <strong>Adicionar nova opção</strong>
-                <small>Crie até 3 botões verticais: cada um pode responder, abrir link ou fazer os dois.</small>
-              </button>
             </div>
 
-            <div className="pathColumn previewColumn">
+            <div className="pathColumn builderColumn">
+              <span className="stepNumber">2</span>
+              <h3>Mensagem e botões</h3>
+
+              {form.triggerType !== 'welcome_contact' && (
+                <div className="miniScopeBox">
+                  <strong>Onde essa automação funciona?</strong>
+                  <div className="automationScopeChoices compactChoices">
+                    <button type="button" className={(form.publicationMode || 'all') === 'all' ? 'scopeChoice active' : 'scopeChoice'} onClick={() => setForm({ ...form, publicationMode: 'all', publicationUrl: '' })}>
+                      <CheckCircle2 size={16} />
+                      <span><strong>Todas</strong><small>Funciona em qualquer publicação.</small></span>
+                    </button>
+                    <button type="button" className={form.publicationMode === 'single' ? 'scopeChoice active' : 'scopeChoice'} onClick={() => setForm({ ...form, publicationMode: 'single' })}>
+                      <LinkIcon size={16} />
+                      <span><strong>Uma só</strong><small>Funciona só no post escolhido.</small></span>
+                    </button>
+                  </div>
+                  {form.publicationMode === 'single' && (
+                    <label>Link da publicação<input placeholder="https://www.instagram.com/p/..." value={form.publicationUrl} onChange={(e) => setForm({ ...form, publicationUrl: e.target.value })} /></label>
+                  )}
+                </div>
+              )}
+
+              <label className="messageBox">Mensagem que a pessoa recebe<textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
+
+              <div className="optionSummary">
+                <strong>Botões</strong>
+                <small>{form.options.length}/{MAX_OPTIONS} no modelo bonito</small>
+              </div>
+
+              <div className="cleanOptionsList">
+                {form.options.map((option, index) => {
+                  const actionType = option.actionType || (option.linkUrl && option.response ? 'both' : option.linkUrl ? 'link' : 'response');
+                  const showResponse = actionType === 'response' || actionType === 'both';
+                  const showLink = actionType === 'link' || actionType === 'both';
+                  return (
+                    <div className="cleanOptionCard compactOptionCard" key={`option-${index}`}>
+                      <div className="cleanOptionHeader">
+                        <strong>Botão {index + 1}</strong>
+                        <button type="button" className="iconGhost" onClick={() => removeOption(index)} disabled={form.options.length <= 1}><Trash2 size={15} /></button>
+                      </div>
+
+                      <label>Nome do botão<input placeholder="Ex: Quero o link" value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={20} /></label>
+
+                      <div className="actionChoiceBlock">
+                        <strong>Depois do clique</strong>
+                        <div className="actionChoiceRow">
+                          <button type="button" className={actionType === 'response' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(index, 'response')}>Mensagem</button>
+                          <button type="button" className={actionType === 'link' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(index, 'link')}>Link</button>
+                          <button type="button" className={actionType === 'both' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(index, 'both')}>Os dois</button>
+                        </div>
+                      </div>
+
+                      {showResponse && (
+                        <label>Mensagem que vai enviar<textarea placeholder="Ex: Perfeito! Vou te explicar agora." value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
+                      )}
+
+                      {showLink && (
+                        <div className="optionLinkGrid">
+                          <label>Nome do link<input placeholder="Ex: Acessar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
+                          <label>Link<input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
+              <button type="button" className="wide ghost addButtonSimple" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}><Plus size={18} /> Adicionar botão</button>
+              {form.options.length >= MAX_OPTIONS && <small className="buttonLimitNote">Esse formato do Instagram mostra no máximo 3 botões bonitos na mesma mensagem.</small>}
+            </div>
+
+            <div className="pathColumn previewColumn stickyPreview">
               <span className="stepNumber">3</span>
-              <h3>Prévia estilo direct</h3>
+              <h3>Como vai aparecer</h3>
               <div className="phonePreview">
                 <div className="phoneHeader">
                   <InstagramAvatar account={mainAccount} compact />
@@ -1208,77 +1288,26 @@ function App() {
                 </div>
                 <div className="bubble botBubble">
                   <p>{form.message}</p>
-                  {form.linkUrl && <button type="button">{form.linkLabel || 'Acessar agora'}</button>}
                   {form.options.map((option, index) => (
-                    <button type="button" key={`${option.label}-${index}`}>{option.label || `Opção ${index + 1}`}</button>
+                    <button type="button" key={`${option.label}-${index}`}>{option.label || `Botão ${index + 1}`}</button>
                   ))}
                 </div>
-                <div className="bubble userBubble">{form.options[0]?.label || 'Quero automatizar'}</div>
-                <div className="bubble botBubble smallBubble">{optionPreviewText(form.options[0])}</div>
+                <div className="bubble userBubble">{form.options[0]?.label || 'Saber mais'}</div>
+                <div className="bubble botBubble smallBubble">
+                  <p>{form.options[0]?.response || (form.options[0]?.linkUrl ? 'Toque no botão abaixo para acessar.' : 'Aqui aparece a resposta desse botão.')}</p>
+                  {form.options[0]?.linkUrl && <button type="button">{form.options[0]?.linkLabel || 'Acessar agora'}</button>}
+                </div>
+              </div>
+
+              <div className="finalSaveArea simpleSaveArea">
+                <button type="button" className="primaryAction" onClick={saveRule} disabled={loading}>
+                  {loading ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
+                  {editingRuleId ? 'Salvar alterações' : 'Salvar automação'}
+                </button>
+                <small>Revise a prévia antes de salvar.</small>
               </div>
             </div>
           </div>
-
-          <details className="advancedBox" open>
-            <summary>Configuração da automação</summary>
-            <div className="formGrid">
-              <label>Título do fluxo<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
-              {form.triggerType !== 'welcome_contact' ? (
-                <label>Palavra-chave<input value={form.keyword} onChange={(e) => setForm({ ...form, keyword: e.target.value })} /></label>
-              ) : (
-                <div className="welcomeInfo"><Sparkles size={18} /><span>Boas-vindas dispara na primeira interação quando nenhum comentário/direct bate em outra palavra-chave.</span></div>
-              )}
-
-              {form.triggerType !== 'welcome_contact' && <div className="wide automationScopeBox">
-                <div className="automationScopeHeader"><MessageCircle size={17} /> Publicações que vão ativar esta automação</div>
-                <div className="automationScopeChoices">
-                  <button type="button" className={(form.publicationMode || 'all') === 'all' ? 'scopeChoice active' : 'scopeChoice'} onClick={() => setForm({ ...form, publicationMode: 'all', publicationUrl: '' })}>
-                    <CheckCircle2 size={18} />
-                    <span><strong>Todas as publicações</strong><small>Qualquer publicação com essa palavra-chave pode iniciar a automação.</small></span>
-                  </button>
-                  <button type="button" className={form.publicationMode === 'single' ? 'scopeChoice active' : 'scopeChoice'} onClick={() => setForm({ ...form, publicationMode: 'single' })}>
-                    <LinkIcon size={18} />
-                    <span><strong>Somente uma publicação</strong><small>A automação só funciona na publicação que você escolher.</small></span>
-                  </button>
-                </div>
-                {form.publicationMode === 'single' && (
-                  <label>Link da publicação<input placeholder="https://www.instagram.com/p/..." value={form.publicationUrl} onChange={(e) => setForm({ ...form, publicationUrl: e.target.value })} /></label>
-                )}
-              </div>}
-
-              <label className="wide">Mensagem inicial <small>Texto curto que aparece junto dos botões. Use até 3 opções para ficar bonito.</small><textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
-              <label>Nome do link<input placeholder="Ex: Acessar agora" value={form.linkLabel} onChange={(e) => setForm({ ...form, linkLabel: e.target.value })} /></label>
-              <label>URL do link<input placeholder="https://..." value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })} /></label>
-
-              {form.options.map((option, index) => (
-                <div className="wide optionEditor" key={`option-${index}`}>
-                  <div className="optionEditorHeader">
-                    <strong>Opção {index + 1}</strong>
-                    <button type="button" className="iconGhost" onClick={() => removeOption(index)} disabled={form.options.length <= 1}><Trash2 size={15} /></button>
-                  </div>
-                  <label>Texto do botão <small>máx. 20 letras</small><input placeholder="Ex: Saber mais" value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={20} /></label>
-                  <label>Resposta ao clicar <small>opcional se tiver link</small><textarea placeholder="Mensagem que será enviada depois do clique." value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
-                  <div className="optionLinkGrid">
-                    <label>Nome do link <small>opcional</small><input placeholder="Ex: Acessar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
-                    <label>Link desta opção <small>opcional</small><input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
-                  </div>
-                  <div className="optionLinkGrid">
-                    <label>Nome do link desta opção<input placeholder="Ex: Comprar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
-                    <label>Link desta opção<input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
-                  </div>
-                </div>
-              ))}
-
-              <button type="button" className="wide ghost" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}><Plus size={18} /> Adicionar nova opção</button>
-              <div className="wide finalSaveArea">
-                <button type="button" className="primaryAction" onClick={saveRule} disabled={loading}>
-                  {loading ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
-                  {editingRuleId ? 'Salvar alterações da automação' : 'Salvar automação'}
-                </button>
-                <small>Revise tudo acima antes de salvar.</small>
-              </div>
-            </div>
-          </details>
         </section>
 
         <section className="panel" id="ativas">
