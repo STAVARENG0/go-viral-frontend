@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.matheus-caetano.com').replace(/\/$/, '');
-const MAX_OPTIONS = 7;
+const MAX_OPTIONS = 3;
 
 const triggerTemplates = [
   {
@@ -66,8 +66,10 @@ const triggerTemplates = [
 
 function defaultOption() {
   return {
-    label: 'Quero o link',
-    response: 'Perfeito! Vou te mandar o próximo passo agora.'
+    label: 'Saber mais',
+    response: 'Perfeito! Vou te mandar o próximo passo agora.',
+    linkLabel: 'Acessar agora',
+    linkUrl: ''
   };
 }
 
@@ -806,10 +808,12 @@ function App() {
     return (options || [])
       .slice(0, MAX_OPTIONS)
       .map((option) => ({
-        label: String(option.label || '').trim(),
-        response: String(option.response || '').trim()
+        label: String(option.label || '').trim().slice(0, 20),
+        response: String(option.response || '').trim(),
+        linkLabel: String(option.linkLabel || option.link_label || 'Acessar agora').trim(),
+        linkUrl: String(option.linkUrl || option.link_url || '').trim()
       }))
-      .filter((option) => option.label && option.response && !isPlaceholderOption(option));
+      .filter((option) => option.label && (option.response || option.linkUrl) && !isPlaceholderOption(option));
   }
 
   async function saveRule() {
@@ -830,10 +834,20 @@ function App() {
     }
     for (const option of normalizedOptions) {
       const labelProblem = automationTextProblem(option.label, 'Texto do botão');
-      const responseProblem = automationTextProblem(option.response, 'Resposta do botão');
-      if (labelProblem || responseProblem) {
-        alert(labelProblem || responseProblem);
+      if (labelProblem) {
+        alert(labelProblem);
         return;
+      }
+      if (!option.response && !option.linkUrl) {
+        alert('Cada opção precisa ter uma resposta, um link, ou os dois.');
+        return;
+      }
+      if (option.response) {
+        const responseProblem = automationTextProblem(option.response, 'Resposta do botão');
+        if (responseProblem) {
+          alert(responseProblem);
+          return;
+        }
       }
     }
     if (!isWelcomeTrigger && selectedPublicationMode === 'single' && !selectedPublicationUrl) {
@@ -1170,7 +1184,7 @@ function App() {
               <button type="button" className="templateCard addOptionCard" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}>
                 <Plus size={18} />
                 <strong>Adicionar nova opção</strong>
-                <small>Crie botões personalizados para o cliente clicar no direct.</small>
+                <small>Crie até 3 botões verticais: cada um pode responder, abrir link ou fazer os dois.</small>
               </button>
             </div>
 
@@ -1189,8 +1203,11 @@ function App() {
                     <button type="button" key={`${option.label}-${index}`}>{option.label || `Opção ${index + 1}`}</button>
                   ))}
                 </div>
-                <div className="bubble userBubble">{form.options[0]?.label || 'Quero automatizar'}</div>
-                <div className="bubble botBubble smallBubble">{form.options[0]?.response || 'Resposta automática da opção escolhida.'}</div>
+                <div className="bubble userBubble">{form.options[0]?.label || 'Saber mais'}</div>
+                <div className="bubble botBubble smallBubble">
+                  <p>{form.options[0]?.response || 'Resposta automática da opção escolhida.'}</p>
+                  {form.options[0]?.linkUrl && <button type="button">{form.options[0]?.linkLabel || 'Acessar agora'}</button>}
+                </div>
               </div>
             </div>
           </div>
@@ -1222,7 +1239,7 @@ function App() {
                 )}
               </div>}
 
-              <label className="wide">Mensagem inicial <small>Nos comentários, o Instagram recebe primeiro uma private reply. Quando permitido, os botões aparecem como respostas rápidas.</small><textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
+              <label className="wide">Mensagem inicial <small>Texto curto que aparece junto dos botões. Use até 3 opções para ficar bonito.</small><textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
               <label>Nome do link<input placeholder="Ex: Acessar agora" value={form.linkLabel} onChange={(e) => setForm({ ...form, linkLabel: e.target.value })} /></label>
               <label>URL do link<input placeholder="https://..." value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })} /></label>
 
@@ -1232,8 +1249,12 @@ function App() {
                     <strong>Opção {index + 1}</strong>
                     <button type="button" className="iconGhost" onClick={() => removeOption(index)} disabled={form.options.length <= 1}><Trash2 size={15} /></button>
                   </div>
-                  <label>Texto do botão<input value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={60} /></label>
-                  <label>Resposta do botão<textarea value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
+                  <label>Texto do botão <small>máx. 20 letras</small><input placeholder="Ex: Saber mais" value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={20} /></label>
+                  <label>Resposta ao clicar <small>opcional se tiver link</small><textarea placeholder="Mensagem que será enviada depois do clique." value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
+                  <div className="optionLinkGrid">
+                    <label>Nome do link <small>opcional</small><input placeholder="Ex: Acessar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
+                    <label>Link desta opção <small>opcional</small><input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
+                  </div>
                 </div>
               ))}
 

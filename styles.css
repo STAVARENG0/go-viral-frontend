@@ -678,3 +678,21 @@ label { display: grid; gap: 8px; color: #111; font-weight: 900; }
   white-space: normal;
   text-align: center;
 }
+
+.optionLinkGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.phonePreview .botBubble button {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+}
+
+@media (max-width: 720px) {
+  .optionLinkGrid {
+    grid-template-columns: 1fr;
+  }
+}

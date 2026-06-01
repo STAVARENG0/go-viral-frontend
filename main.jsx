@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.matheus-caetano.com').replace(/\/$/, '');
-const MAX_OPTIONS = 7;
+const MAX_OPTIONS = 3;
 
 const triggerTemplates = [
   {
@@ -1194,7 +1194,7 @@ function App() {
               <button type="button" className="templateCard addOptionCard" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}>
                 <Plus size={18} />
                 <strong>Adicionar nova opção</strong>
-                <small>Crie botões personalizados para o cliente clicar no direct.</small>
+                <small>Crie até 3 botões verticais: cada um pode responder, abrir link ou fazer os dois.</small>
               </button>
             </div>
 
@@ -1246,7 +1246,7 @@ function App() {
                 )}
               </div>}
 
-              <label className="wide">Mensagem inicial <small>Nos comentários, o Instagram recebe primeiro uma private reply. Quando permitido, os botões aparecem como respostas rápidas.</small><textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
+              <label className="wide">Mensagem inicial <small>Texto curto que aparece junto dos botões. Use até 3 opções para ficar bonito.</small><textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
               <label>Nome do link<input placeholder="Ex: Acessar agora" value={form.linkLabel} onChange={(e) => setForm({ ...form, linkLabel: e.target.value })} /></label>
               <label>URL do link<input placeholder="https://..." value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })} /></label>
 
@@ -1256,8 +1256,12 @@ function App() {
                     <strong>Opção {index + 1}</strong>
                     <button type="button" className="iconGhost" onClick={() => removeOption(index)} disabled={form.options.length <= 1}><Trash2 size={15} /></button>
                   </div>
-                  <label>Texto do botão<input value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={60} /></label>
-                  <label>Resposta do botão<textarea value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
+                  <label>Texto do botão <small>máx. 20 letras</small><input placeholder="Ex: Saber mais" value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={20} /></label>
+                  <label>Resposta ao clicar <small>opcional se tiver link</small><textarea placeholder="Mensagem que será enviada depois do clique." value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
+                  <div className="optionLinkGrid">
+                    <label>Nome do link <small>opcional</small><input placeholder="Ex: Acessar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
+                    <label>Link desta opção <small>opcional</small><input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
+                  </div>
                   <div className="optionLinkGrid">
                     <label>Nome do link desta opção<input placeholder="Ex: Comprar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
                     <label>Link desta opção<input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
