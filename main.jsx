@@ -67,7 +67,9 @@ const triggerTemplates = [
 function defaultOption() {
   return {
     label: 'Quero o link',
-    response: 'Perfeito! Vou te mandar o próximo passo agora.'
+    response: 'Perfeito! Vou te mandar o próximo passo agora.',
+    linkLabel: 'Acessar agora',
+    linkUrl: ''
   };
 }
 
@@ -128,6 +130,15 @@ function isPlaceholderOption(option) {
   const label = normalizeKeyword(option?.label);
   const response = normalizeKeyword(option?.response);
   return label === 'nova opcao' || response === 'digite aqui a resposta automatica desta opcao' || response === 'digite aqui';
+}
+
+function optionPreviewText(option) {
+  const parts = [String(option?.response || 'Resposta automática da opção escolhida.').trim()];
+  const url = String(option?.linkUrl || '').trim();
+  if (url) {
+    parts.push(`🔗 ${String(option?.linkLabel || 'Acessar agora').trim()}: ${url}`);
+  }
+  return parts.filter(Boolean).join('\n\n');
 }
 
 function statusLabel(status) {
@@ -807,7 +818,9 @@ function App() {
       .slice(0, MAX_OPTIONS)
       .map((option) => ({
         label: String(option.label || '').trim(),
-        response: String(option.response || '').trim()
+        response: String(option.response || '').trim(),
+        linkLabel: String(option.linkLabel || '').trim(),
+        linkUrl: String(option.linkUrl || '').trim()
       }))
       .filter((option) => option.label && option.response && !isPlaceholderOption(option));
   }
@@ -833,6 +846,10 @@ function App() {
       const responseProblem = automationTextProblem(option.response, 'Resposta do botão');
       if (labelProblem || responseProblem) {
         alert(labelProblem || responseProblem);
+        return;
+      }
+      if (option.linkUrl && !/^https?:\/\//i.test(option.linkUrl)) {
+        alert('O link da opção precisa começar com http:// ou https://');
         return;
       }
     }
@@ -894,7 +911,14 @@ function App() {
       publicationMode: rule.publicationMode || rule.publication_mode || 'all',
       publicationUrl: rule.publicationUrl || rule.publication_url || '',
       active: rule.active !== 0 && rule.active !== false,
-      options: Array.isArray(rule.options) && rule.options.length ? rule.options.slice(0, MAX_OPTIONS) : [defaultOption()]
+      options: Array.isArray(rule.options) && rule.options.length
+        ? rule.options.slice(0, MAX_OPTIONS).map((option) => ({
+          label: option.label || '',
+          response: option.response || '',
+          linkLabel: option.linkLabel || option.link_label || 'Acessar agora',
+          linkUrl: option.linkUrl || option.link_url || ''
+        }))
+        : [defaultOption()]
     });
     window.location.hash = '#caminho';
   }
@@ -1190,7 +1214,7 @@ function App() {
                   ))}
                 </div>
                 <div className="bubble userBubble">{form.options[0]?.label || 'Quero automatizar'}</div>
-                <div className="bubble botBubble smallBubble">{form.options[0]?.response || 'Resposta automática da opção escolhida.'}</div>
+                <div className="bubble botBubble smallBubble">{optionPreviewText(form.options[0])}</div>
               </div>
             </div>
           </div>
@@ -1234,6 +1258,10 @@ function App() {
                   </div>
                   <label>Texto do botão<input value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={60} /></label>
                   <label>Resposta do botão<textarea value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
+                  <div className="optionLinkGrid">
+                    <label>Nome do link desta opção<input placeholder="Ex: Comprar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
+                    <label>Link desta opção<input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
+                  </div>
                 </div>
               ))}
 

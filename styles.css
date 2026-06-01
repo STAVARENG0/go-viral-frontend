@@ -657,3 +657,24 @@ label { display: grid; gap: 8px; color: #111; font-weight: 900; }
 .checkoutTotals { display: grid; gap: 10px; margin: 4px 0 8px; }
 .checkoutTotals div { display: flex; justify-content: space-between; gap: 12px; border-bottom: 1px solid rgba(17,17,17,.08); padding-bottom: 8px; }
 .checkoutTotals .total { border-bottom: 0; font-size: 18px; }
+
+
+.optionLinkGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 760px) {
+  .optionLinkGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.phonePreview .bubble button {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  white-space: normal;
+  text-align: center;
+}
