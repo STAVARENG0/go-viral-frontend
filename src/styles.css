@@ -675,3 +675,77 @@ label { display: grid; gap: 8px; color: #111; font-weight: 900; }
     grid-template-columns: 1fr;
   }
 }
+
+.flowBuilder {
+  display: grid;
+  gap: 16px;
+}
+
+.flowBlock {
+  border: 1px solid rgba(17,17,17,.1);
+  background: rgba(255,255,255,.78);
+  border-radius: 22px;
+  padding: 16px;
+  display: grid;
+  gap: 14px;
+}
+
+.flowBlockTitle {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.flowBlockTitle span {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border-radius: 999px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--red), var(--red-2));
+  font-weight: 950;
+  flex: 0 0 auto;
+}
+
+.flowBlockTitle strong {
+  display: block;
+  font-size: 16px;
+}
+
+.flowBlockTitle small {
+  display: block;
+  color: var(--muted);
+  margin-top: 3px;
+}
+
+.cleanOptionsList {
+  display: grid;
+  gap: 12px;
+}
+
+.cleanOptionCard {
+  border: 1px solid rgba(17,17,17,.1);
+  background: #fff;
+  border-radius: 18px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.cleanOptionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cleanOptionCard select {
+  width: 100%;
+  border: 1px solid rgba(17,17,17,.12);
+  border-radius: 16px;
+  padding: 13px 14px;
+  background: #fff;
+  color: #111;
+  font-weight: 800;
+}

@@ -67,6 +67,7 @@ const triggerTemplates = [
 function defaultOption() {
   return {
     label: 'Saber mais',
+    actionType: 'response',
     response: 'Perfeito! Vou te mandar o próximo passo agora.',
     linkLabel: 'Acessar agora',
     linkUrl: ''
@@ -1030,6 +1031,18 @@ function App() {
     }));
   }
 
+  function updateOptionAction(index, value) {
+    setForm((prev) => ({
+      ...prev,
+      options: prev.options.map((option, optionIndex) => {
+        if (optionIndex !== index) return option;
+        if (value === 'link') return { ...option, actionType: value, response: '' };
+        if (value === 'response') return { ...option, actionType: value, linkUrl: '' };
+        return { ...option, actionType: value };
+      })
+    }));
+  }
+
   function addOption() {
     setForm((prev) => {
       if (prev.options.length >= MAX_OPTIONS) return prev;
@@ -1213,7 +1226,7 @@ function App() {
           </div>
 
           <details className="advancedBox" open>
-            <summary>Configuração da automação</summary>
+            <summary>Editar automação</summary>
             <div className="formGrid">
               <label>Título do fluxo<input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></label>
               {form.triggerType !== 'welcome_contact' ? (
@@ -1239,26 +1252,67 @@ function App() {
                 )}
               </div>}
 
-              <label className="wide">Mensagem inicial <small>Texto curto que aparece junto dos botões. Use até 3 opções para ficar bonito.</small><textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} /></label>
-              <label>Nome do link<input placeholder="Ex: Acessar agora" value={form.linkLabel} onChange={(e) => setForm({ ...form, linkLabel: e.target.value })} /></label>
-              <label>URL do link<input placeholder="https://..." value={form.linkUrl} onChange={(e) => setForm({ ...form, linkUrl: e.target.value })} /></label>
-
-              {form.options.map((option, index) => (
-                <div className="wide optionEditor" key={`option-${index}`}>
-                  <div className="optionEditorHeader">
-                    <strong>Opção {index + 1}</strong>
-                    <button type="button" className="iconGhost" onClick={() => removeOption(index)} disabled={form.options.length <= 1}><Trash2 size={15} /></button>
+              <div className="wide flowBuilder">
+                <div className="flowBlock">
+                  <div className="flowBlockTitle">
+                    <span>1</span>
+                    <div>
+                      <strong>Mensagem que chega primeiro</strong>
+                      <small>Escreva curto. Os botões vão aparecer junto dessa mensagem.</small>
+                    </div>
                   </div>
-                  <label>Texto do botão <small>máx. 20 letras</small><input placeholder="Ex: Saber mais" value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={20} /></label>
-                  <label>Resposta ao clicar <small>opcional se tiver link</small><textarea placeholder="Mensagem que será enviada depois do clique." value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
-                  <div className="optionLinkGrid">
-                    <label>Nome do link <small>opcional</small><input placeholder="Ex: Acessar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
-                    <label>Link desta opção <small>opcional</small><input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
+                  <textarea value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} />
+                </div>
+
+                <div className="flowBlock">
+                  <div className="flowBlockTitle">
+                    <span>2</span>
+                    <div>
+                      <strong>Botões que aparecem no direct</strong>
+                      <small>Use até 3 botões. Cada botão pode responder, mandar link ou fazer os dois.</small>
+                    </div>
+                  </div>
+
+                  <div className="cleanOptionsList">
+                    {form.options.map((option, index) => {
+                      const actionType = option.actionType || (option.linkUrl && option.response ? 'both' : option.linkUrl ? 'link' : 'response');
+                      const showResponse = actionType === 'response' || actionType === 'both';
+                      const showLink = actionType === 'link' || actionType === 'both';
+                      return (
+                        <div className="cleanOptionCard" key={`option-${index}`}>
+                          <div className="cleanOptionHeader">
+                            <strong>Botão {index + 1}</strong>
+                            <button type="button" className="iconGhost" onClick={() => removeOption(index)} disabled={form.options.length <= 1}><Trash2 size={15} /></button>
+                          </div>
+
+                          <label>Texto do botão <small>curto, máx. 20 letras</small><input placeholder="Ex: Saber mais" value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={20} /></label>
+
+                          <label>O que acontece quando clicar?
+                            <select value={actionType} onChange={(e) => updateOptionAction(index, e.target.value)}>
+                              <option value="response">Enviar uma resposta</option>
+                              <option value="link">Enviar um link</option>
+                              <option value="both">Resposta + link</option>
+                            </select>
+                          </label>
+
+                          {showResponse && (
+                            <label>Resposta depois do clique<textarea placeholder="Ex: Perfeito! Vou te explicar agora." value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
+                          )}
+
+                          {showLink && (
+                            <div className="optionLinkGrid">
+                              <label>Nome do link<input placeholder="Ex: Acessar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
+                              <label>URL do link<input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              ))}
+              </div>
 
-              <button type="button" className="wide ghost" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}><Plus size={18} /> Adicionar nova opção</button>
+              <button type="button" className="wide ghost" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}><Plus size={18} /> Adicionar botão</button>
               <div className="wide finalSaveArea">
                 <button type="button" className="primaryAction" onClick={saveRule} disabled={loading}>
                   {loading ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />}
