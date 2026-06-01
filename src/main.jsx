@@ -533,7 +533,7 @@ function BillingPanel({ billing, plans, loading, onChoosePlan }) {
     <section className="panel billingPanel" id="planos">
       <div className="panelHeader">
         <div>
-          <h2><CreditCard size={20} /> Planos e assinatura</h2>
+          <h2><CreditCard size={20} /> Planos e pagamento</h2>
           <p>Escolha o plano ideal. O Pro é o melhor equilíbrio para vender mais sem começar caro.</p>
         </div>
         <div className="currentPlanBadge">Plano atual: <strong>{subscription.planName || subscription.planId}</strong></div>
@@ -604,7 +604,7 @@ function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
         <div className="checkoutHeader centeredCheckoutHeader">
           <span className="eyebrow"><ShieldCheck size={14} /> Checkout Mercado Pago</span>
           <h2>Plano {plan.name}</h2>
-          <p>Você confirma o plano aqui e finaliza com segurança no Mercado Pago. Pix, cartão e outros métodos aparecem lá conforme sua conta.</p>
+          <p>Você confirma o plano aqui e finaliza no Checkout Pro do Mercado Pago. Pix, cartão, boleto e outros métodos disponíveis aparecem lá.</p>
         </div>
 
         <div className="checkoutGrid checkoutGridClean">
@@ -613,7 +613,7 @@ function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
             <h3>{plan.name}</h3>
             {hasDiscount ? <small className="oldPrice">De {originalLabel}</small> : null}
             <strong>{finalLabel}</strong>
-            <small>Assinatura mensal. Você pode cancelar quando quiser.</small>
+            <small>Pagamento mensal. Cada pagamento aprovado libera o acesso por 31 dias.</small>
             <ul>
               {plan.features.map((feature) => <li key={feature}><CheckCircle2 size={14} /> {feature}</li>)}
             </ul>
@@ -622,7 +622,7 @@ function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
 
           <article className="paymentBox checkoutActionBox">
             <h3>Cupom de indicação</h3>
-            <p>Use o cupom/link do afiliado. Ele registra a indicação e, se o desconto estiver ativo, aplica no valor mensal.</p>
+            <p>Use o cupom/link do afiliado. Ele registra a indicação e, se o desconto estiver ativo, aplica no pagamento.</p>
             <div className="couponInline">
               <input value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} placeholder="Ex: MATHEUS123" />
               <button type="button" className="ghost" onClick={validateCoupon} disabled={loading || checking}>{checking ? <Loader2 className="spin" size={16} /> : <Gift size={16} />} Validar</button>
@@ -630,7 +630,7 @@ function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
             {preview?.validReferral && <div className="couponStatus success"><CheckCircle2 size={16} /> Cupom válido {preview.affiliateName ? `de ${preview.affiliateName}` : ''}.</div>}
             {preview && !preview.validReferral && <div className="couponStatus error"><XCircle size={16} /> {preview.error || 'Cupom inválido ou não permitido para esta conta.'}</div>}
 
-            <div className="checkoutSecurity"><ShieldCheck size={18} /> <span>A Go Viral não salva dados de cartão. O Mercado Pago processa a cobrança recorrente mensal.</span></div>
+            <div className="checkoutSecurity"><ShieldCheck size={18} /> <span>A Go Viral não salva dados de cartão. O Mercado Pago processa Pix, cartão e os métodos disponíveis no checkout.</span></div>
             <button type="button" className="primaryAction checkoutPayButton" disabled={loading || checking} onClick={() => onConfirm(plan.id, 'mercado_pago', referralCode)}>
               {loading ? <Loader2 className="spin" size={18} /> : <CreditCard size={18} />} Continuar para Mercado Pago
             </button>
