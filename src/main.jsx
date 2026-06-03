@@ -101,6 +101,29 @@ function normalizeKeyword(value) {
     .toLowerCase();
 }
 
+function normalizeReferralCode(value) {
+  return String(value || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toUpperCase()
+    .replace(/[^A-Z0-9]/g, '')
+    .slice(0, 24);
+}
+
+const APP_VIEWS = [
+  { id: 'automacao', hash: 'caminho', label: 'Montar automação', icon: Wand2 },
+  { id: 'ativas', hash: 'ativas', label: 'Automações salvas', icon: PlugZap },
+  { id: 'logs', hash: 'logs', label: 'Registros', icon: Activity },
+  { id: 'planos', hash: 'planos', label: 'Pagamento', icon: CreditCard },
+  { id: 'afiliados', hash: 'afiliados', label: 'Afiliados', icon: Gift },
+  { id: 'configuracoes', hash: 'configuracoes', label: 'Conta', icon: Settings }
+];
+
+function getInitialAppView() {
+  const hash = window.location.hash.replace('#', '');
+  return APP_VIEWS.find((item) => item.hash === hash || item.id === hash)?.id || 'automacao';
+}
+
 function formatDate(value) {
   if (!value) return '—';
   try {
@@ -422,7 +445,7 @@ function AuthScreen({ onAuthenticated }) {
             <label>Senha<input value={form.password} onChange={(e) => update('password', e.target.value)} placeholder="Mínimo 8 caracteres" type="password" autoComplete="new-password" /></label>
             <PasswordStrength password={form.password} />
             <label>Repetir senha<input value={form.confirmPassword} onChange={(e) => update('confirmPassword', e.target.value)} placeholder="Digite a senha de novo" type="password" autoComplete="new-password" /></label>
-            <label>Cupom/link de indicação {initialRef ? '(detectado)' : '(opcional)'}<input value={form.referralCode} onChange={(e) => update('referralCode', e.target.value.toUpperCase())} placeholder="Ex: MATHEUS123" /></label>
+            <label>Cupom/link de indicação {initialRef ? '(fixado pelo link)' : '(opcional)'}<input value={form.referralCode} onChange={(e) => !initialRef && update('referralCode', normalizeReferralCode(e.target.value))} placeholder="Ex: MATHEUS123" readOnly={Boolean(initialRef)} className={initialRef ? 'lockedInput' : ''} /></label>
             <label className="checkLine"><input type="checkbox" checked={form.termsAccepted} onChange={(e) => update('termsAccepted', e.target.checked)} /> Aceito os <a href={`${API_BASE}/terms`} target="_blank" rel="noreferrer">Termos de Uso</a>.</label>
             <label className="checkLine"><input type="checkbox" checked={form.privacyAccepted} onChange={(e) => update('privacyAccepted', e.target.checked)} /> Aceito a <a href={`${API_BASE}/privacy`} target="_blank" rel="noreferrer">Política de Privacidade</a>.</label>
             <button type="submit" disabled={sending}>{sending ? <Loader2 className="spin" size={18} /> : <Sparkles size={18} />} Enviar código e criar conta</button>
@@ -562,24 +585,17 @@ function BillingPanel({ billing, plans, loading, onChoosePlan }) {
 }
 
 function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
-  const [referralCode, setReferralCode] = useState(() => new URLSearchParams(window.location.search).get('ref') || '');
+  const lockedReferralCode = normalizeReferralCode(
+    affiliate?.usedReferralCode || new URLSearchParams(window.location.search).get('ref') || ''
+  );
+  const [referralCode, setReferralCode] = useState(lockedReferralCode);
   const [preview, setPreview] = useState(null);
   const [checking, setChecking] = useState(false);
+  const isReferralLocked = Boolean(lockedReferralCode);
 
-  useEffect(() => {
-    setReferralCode(new URLSearchParams(window.location.search).get('ref') || '');
-    setPreview(null);
-  }, [plan?.id]);
-
-  if (!plan) return null;
-
-  const discountPercent = Number(preview?.pricing?.discountPercent ?? plan.affiliateDiscountPercent ?? affiliate?.discountPercent ?? 0);
-  const finalLabel = preview?.pricing?.finalLabel || preview?.pricing?.amountLabel || (referralCode && plan.couponPriceLabel ? plan.couponPriceLabel : plan.priceLabel);
-  const originalLabel = preview?.pricing?.originalPriceLabel || preview?.pricing?.originalLabel || plan.priceLabel;
-  const hasDiscount = Boolean(preview?.validReferral && discountPercent > 0);
-
-  async function validateCoupon() {
-    if (!referralCode.trim()) {
+  async function requestReferralPreview(code) {
+    const cleanCode = normalizeReferralCode(code);
+    if (!cleanCode || !plan?.id) {
       setPreview(null);
       return;
     }
@@ -590,7 +606,7 @@ function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
-        body: JSON.stringify({ planId: plan.id, referralCode })
+        body: JSON.stringify({ planId: plan.id, referralCode: cleanCode })
       });
       const data = await parseJsonResponse(res);
       setPreview(data);
@@ -601,8 +617,27 @@ function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
     }
   }
 
+  useEffect(() => {
+    setReferralCode(lockedReferralCode);
+    setPreview(null);
+    if (lockedReferralCode && plan?.id) {
+      requestReferralPreview(lockedReferralCode);
+    }
+  }, [plan?.id, lockedReferralCode]);
+
+  if (!plan) return null;
+
+  const discountPercent = Number(preview?.pricing?.discountPercent ?? (referralCode ? plan.affiliateDiscountPercent : 0) ?? 0);
+  const finalLabel = preview?.pricing?.finalLabel || preview?.pricing?.amountLabel || (referralCode && plan.couponPriceLabel ? plan.couponPriceLabel : plan.priceLabel);
+  const originalLabel = preview?.pricing?.originalPriceLabel || preview?.pricing?.originalLabel || plan.priceLabel;
+  const hasDiscount = Boolean((preview?.validReferral || referralCode) && discountPercent > 0);
+
+  async function validateCoupon() {
+    await requestReferralPreview(referralCode);
+  }
+
   return (
-    <div className="checkoutOverlay" role="dialog" aria-modal="true" onMouseDown={(event) => event.target === event.currentTarget && !loading && onClose()}>
+    <div className="checkoutOverlay" role="dialog" aria-modal="true">
       <section className="checkoutSheet glassCard">
         <button type="button" className="checkoutClose" onClick={onClose} disabled={loading} aria-label="Fechar checkout"><X size={18} /></button>
         <div className="checkoutHeader centeredCheckoutHeader">
@@ -626,12 +661,23 @@ function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
 
           <article className="paymentBox checkoutActionBox">
             <h3>Cupom de indicação</h3>
-            <p>Use o cupom/link do afiliado. Ele registra a indicação e, se o desconto estiver ativo, aplica no pagamento.</p>
+            <p>{isReferralLocked ? 'Esse cupom ficou vinculado a esta conta e não pode ser trocado.' : 'Digite um cupom somente se você recebeu um link de indicação.'}</p>
             <div className="couponInline">
-              <input value={referralCode} onChange={(e) => setReferralCode(e.target.value.toUpperCase())} placeholder="Ex: MATHEUS123" />
-              <button type="button" className="ghost" onClick={validateCoupon} disabled={loading || checking}>{checking ? <Loader2 className="spin" size={16} /> : <Gift size={16} />} Validar</button>
+              <input
+                value={referralCode}
+                onChange={(e) => !isReferralLocked && setReferralCode(normalizeReferralCode(e.target.value))}
+                placeholder="Ex: MATHEUS123"
+                readOnly={isReferralLocked}
+                className={isReferralLocked ? 'lockedInput' : ''}
+              />
+              {!isReferralLocked && (
+                <button type="button" className="ghost" onClick={validateCoupon} disabled={loading || checking || !referralCode.trim()}>
+                  {checking ? <Loader2 className="spin" size={16} /> : <Gift size={16} />} Validar
+                </button>
+              )}
             </div>
-            {preview?.validReferral && <div className="couponStatus success"><CheckCircle2 size={16} /> Cupom válido {preview.affiliateName ? `de ${preview.affiliateName}` : ''}.</div>}
+            {isReferralLocked && <div className="couponStatus success"><ShieldCheck size={16} /> Cupom fixo desta conta: {referralCode}.</div>}
+            {preview?.validReferral && !isReferralLocked && <div className="couponStatus success"><CheckCircle2 size={16} /> Cupom válido {preview.affiliateName ? `de ${preview.affiliateName}` : ''}.</div>}
             {preview && !preview.validReferral && <div className="couponStatus error"><XCircle size={16} /> {preview.error || 'Cupom inválido ou não permitido para esta conta.'}</div>}
 
             <div className="checkoutSecurity"><ShieldCheck size={18} /> <span>A Go Viral não salva dados de cartão. O Mercado Pago processa Pix, cartão e os métodos disponíveis no checkout.</span></div>
@@ -647,13 +693,11 @@ function CheckoutModal({ plan, loading, onClose, onConfirm, affiliate }) {
 }
 
 function AffiliatePanel({ affiliate, loading, apiFetch, onRefresh }) {
-  const [code, setCode] = useState(affiliate?.referralCode || '');
   const [pixKey, setPixKey] = useState(affiliate?.pixKey || '');
 
   useEffect(() => {
-    setCode(affiliate?.referralCode || '');
     setPixKey(affiliate?.pixKey || '');
-  }, [affiliate?.referralCode, affiliate?.pixKey]);
+  }, [affiliate?.pixKey]);
 
   async function copyLink() {
     try {
@@ -661,19 +705,6 @@ function AffiliatePanel({ affiliate, loading, apiFetch, onRefresh }) {
       alert('Link copiado.');
     } catch {
       alert(affiliate?.referralLink || 'Link indisponível.');
-    }
-  }
-
-  async function saveCode() {
-    try {
-      await apiFetch('/api/affiliate/code', {
-        method: 'POST',
-        body: JSON.stringify({ code })
-      });
-      await onRefresh();
-      alert('Código atualizado.');
-    } catch (error) {
-      alert(error.message);
     }
   }
 
@@ -718,8 +749,8 @@ function AffiliatePanel({ affiliate, loading, apiFetch, onRefresh }) {
         <div><small>Total recebido</small><strong>{affiliate?.paidLabel || 'R$ 0,00'}</strong></div>
       </div>
       <div className="formGrid">
-        <label>Seu cupom/código<input value={code} onChange={(e) => setCode(e.target.value.toUpperCase())} /></label>
-        <button type="button" onClick={saveCode} disabled={loading}><Save size={18} /> Salvar cupom</button>
+        <label>Seu cupom/código fixo<input value={affiliate?.referralCode || ''} readOnly className="lockedInput" /></label>
+        <div className="couponFixedNotice"><ShieldCheck size={17} /> Esse cupom é criado automaticamente e não pode ser trocado.</div>
         <label className="wide">Seu link de indicação<input value={affiliate?.referralLink || ''} readOnly /></label>
         <button type="button" className="wide ghost" onClick={copyLink} disabled={!affiliate?.referralLink}><Copy size={18} /> Copiar link de indicação</button>
         <label className="wide">Chave Pix para saque<input value={pixKey} onChange={(e) => setPixKey(e.target.value)} placeholder="CPF, e-mail, telefone ou chave aleatória" /></label>
@@ -746,6 +777,7 @@ function App() {
   const [editingRuleId, setEditingRuleId] = useState(null);
   const [form, setForm] = useState(createFormFromTemplate());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeView, setActiveView] = useState(getInitialAppView);
 
   const selectedTemplate = useMemo(
     () => triggerTemplates.find((template) => template.id === form.triggerType) || triggerTemplates[0],
@@ -753,6 +785,13 @@ function App() {
   );
   const mainAccount = accounts[0] || null;
   const activeRules = rules.filter((rule) => rule.active !== 0 && rule.active !== false);
+
+  function goToView(viewId) {
+    const view = APP_VIEWS.find((item) => item.id === viewId) || APP_VIEWS[0];
+    setActiveView(view.id);
+    setMenuOpen(false);
+    window.history.replaceState({}, '', `${window.location.pathname}#${view.hash}`);
+  }
 
   async function apiFetch(path, options = {}) {
     const res = await fetch(`${API_BASE}${path}`, {
@@ -894,6 +933,7 @@ function App() {
       setForm(createFormFromTemplate(selectedTemplate));
       await loadData();
       alert('Automação salva.');
+      goToView('ativas');
     } catch (err) {
       alert(err.message);
     } finally {
@@ -925,7 +965,7 @@ function App() {
         }))
         : [defaultOption(0)]
     });
-    window.location.hash = '#caminho';
+    goToView('automacao');
   }
 
   async function deleteRule(id) {
@@ -1127,12 +1167,14 @@ function App() {
 
         {menuOpen && (
           <nav className="topMenu">
-            <a className="menuItem active" href="#caminho" onClick={() => setMenuOpen(false)}><Wand2 size={15} /> Caminho mental</a>
-            <a className="menuItem" href="#ativas" onClick={() => setMenuOpen(false)}><PlugZap size={15} /> Automações ativas</a>
-            <a className="menuItem" href="#logs" onClick={() => setMenuOpen(false)}><Activity size={15} /> Registro</a>
-            <a className="menuItem" href="#planos" onClick={() => setMenuOpen(false)}><CreditCard size={15} /> Planos</a>
-            <a className="menuItem" href="#afiliados" onClick={() => setMenuOpen(false)}><Gift size={15} /> Afiliados</a>
-            <a className="menuItem" href="#configuracoes" onClick={() => setMenuOpen(false)}><Settings size={15} /> Conta</a>
+            {APP_VIEWS.map((view) => {
+              const Icon = view.icon;
+              return (
+                <button key={view.id} type="button" className={activeView === view.id ? 'menuItem active' : 'menuItem'} onClick={() => goToView(view.id)}>
+                  <Icon size={15} /> {view.label}
+                </button>
+              );
+            })}
             <button type="button" className="menuItem" onClick={loadData} disabled={loading}>{loading ? <Loader2 className="spin" size={15} /> : <RefreshCw size={15} />} Sincronizar dados</button>
             <button type="button" className="menuItem logoutMenu" onClick={logout}><LogOut size={15} /> Sair</button>
           </nav>
@@ -1163,12 +1205,12 @@ function App() {
           </div>
         </section>
 
-        <div className="grid cards twoCards">
+        {activeView === 'automacao' && <div className="grid cards twoCards">
           <div className="metricCard"><Bot /><strong>{activeRules.length}</strong><span>Automações ativas</span></div>
           <div className="metricCard"><MessageCircle /><strong>{logs.length}</strong><span>Chamadas registradas</span></div>
-        </div>
+        </div>}
 
-        <section className="mentalPanel" id="caminho">
+        <section className="mentalPanel tabPanel" id="caminho" hidden={activeView !== 'automacao'}>
           <div className="panelHeader">
             <div>
               <h2><Wand2 size={20} /> Montar automação</h2>
@@ -1310,7 +1352,7 @@ function App() {
           </div>
         </section>
 
-        <section className="panel" id="ativas">
+        <section className="panel tabPanel" id="ativas" hidden={activeView !== 'ativas'}>
           <h2><PlugZap size={20} /> Automações ativas</h2>
           <div className="rulesList">
             {rules.map((rule) => (
@@ -1334,7 +1376,7 @@ function App() {
           </div>
         </section>
 
-        <section className="panel" id="logs">
+        <section className="panel tabPanel" id="logs" hidden={activeView !== 'logs'}>
           <div className="panelHeader">
             <div>
               <h2><Activity size={20} /> Registro de atividades</h2>
@@ -1355,10 +1397,10 @@ function App() {
           </div>
         </section>
 
-        <BillingPanel billing={billing} plans={plans} loading={loading} onChoosePlan={choosePlan} />
-        <AffiliatePanel affiliate={affiliate} loading={loading} apiFetch={apiFetch} onRefresh={loadData} />
+        {activeView === 'planos' && <BillingPanel billing={billing} plans={plans} loading={loading} onChoosePlan={choosePlan} />}
+        {activeView === 'afiliados' && <AffiliatePanel affiliate={affiliate} loading={loading} apiFetch={apiFetch} onRefresh={loadData} />}
+        {activeView === 'configuracoes' && <AccountSettings user={user} loading={loading} apiFetch={apiFetch} onUserUpdated={setUser} />}
         <CheckoutModal plan={checkoutPlan} loading={loading} onClose={() => setCheckoutPlan(null)} onConfirm={confirmCheckout} affiliate={affiliate} />
-        <AccountSettings user={user} loading={loading} apiFetch={apiFetch} onUserUpdated={setUser} />
       </section>
     </main>
   );
