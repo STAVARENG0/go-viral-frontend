@@ -1098,3 +1098,23 @@ body::-webkit-scrollbar,
   }
 }
 
+
+.nestedOptionsBlock {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+  padding-left: 12px;
+  border-left: 2px solid rgba(255, 255, 255, 0.12);
+}
+
+.nestedOptionCard {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.nestedSummary {
+  margin-top: 4px;
+}
+
+.actionChoiceRow {
+  flex-wrap: wrap;
+}

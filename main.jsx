@@ -33,6 +33,8 @@ import {
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.matheus-caetano.com').replace(/\/$/, '');
 const MAX_OPTIONS = 3;
+const MAX_FLOW_DEPTH = 8;
+const MAX_FLOW_NODES = 60;
 
 const triggerTemplates = [
   {
@@ -71,8 +73,122 @@ function defaultOption(index = 0) {
     actionType: 'response',
     response: '',
     linkLabel: 'Acessar agora',
-    linkUrl: ''
+    linkUrl: '',
+    options: []
   };
+}
+
+function optionActionType(option = {}) {
+  if (Array.isArray(option.options) && option.options.length) return 'flow';
+  if (option.actionType || option.action_type) return option.actionType || option.action_type;
+  const hasResponse = Boolean(String(option.response || '').trim());
+  const hasLink = Boolean(String(option.linkUrl || option.link_url || '').trim());
+  if (hasResponse && hasLink) return 'both';
+  if (hasLink) return 'link';
+  return 'response';
+}
+
+function prepareOptionForForm(option = {}, index = 0, depth = 0) {
+  const children = Array.isArray(option.options) && depth + 1 < MAX_FLOW_DEPTH
+    ? option.options.slice(0, MAX_OPTIONS).map((child, childIndex) => prepareOptionForForm(child, childIndex, depth + 1))
+    : [];
+
+  return {
+    label: option.label || `Botão ${index + 1}`,
+    actionType: children.length ? 'flow' : optionActionType(option),
+    response: option.response || '',
+    linkLabel: option.linkLabel || option.link_label || 'Acessar agora',
+    linkUrl: option.linkUrl || option.link_url || '',
+    options: children
+  };
+}
+
+function cleanFlowOptions(options = [], depth = 0, state = { count: 0 }) {
+  if (!Array.isArray(options) || depth >= MAX_FLOW_DEPTH || state.count >= MAX_FLOW_NODES) return [];
+
+  return options
+    .slice(0, MAX_OPTIONS)
+    .map((option, index) => {
+      if (state.count >= MAX_FLOW_NODES) return null;
+      state.count += 1;
+
+      const children = cleanFlowOptions(option.options || [], depth + 1, state);
+      const actionType = optionActionType({ ...option, options: children });
+      const isFlow = actionType === 'flow';
+
+      return {
+        label: String(option.label || '').trim().slice(0, 20),
+        actionType: isFlow ? 'flow' : actionType,
+        response: String(option.response || '').trim(),
+        linkLabel: String(option.linkLabel || option.link_label || 'Acessar agora').trim(),
+        linkUrl: isFlow ? '' : String(option.linkUrl || option.link_url || '').trim(),
+        options: isFlow ? children : []
+      };
+    })
+    .filter((option) => option && option.label && (option.response || option.linkUrl || option.options.length) && !isPlaceholderOption(option));
+}
+
+function validateOptionsTree(options = [], depth = 0, state = { count: 0 }) {
+  for (const option of options) {
+    state.count += 1;
+
+    if (state.count > MAX_FLOW_NODES) return `Use no máximo ${MAX_FLOW_NODES} botões no fluxo inteiro.`;
+    if (depth >= MAX_FLOW_DEPTH) return `Use no máximo ${MAX_FLOW_DEPTH} níveis de mensagens.`;
+
+    const labelProblem = automationTextProblem(option.label, 'Texto do botão');
+    if (labelProblem) return labelProblem;
+
+    const hasChildren = Array.isArray(option.options) && option.options.length > 0;
+    if (!option.response && !option.linkUrl && !hasChildren) return 'Cada opção precisa ter mensagem, link ou próximas opções.';
+    if (hasChildren && !option.response) return `A opção "${option.label}" precisa ter a mensagem que será enviada antes dos próximos botões.`;
+
+    if (option.response) {
+      const responseProblem = automationTextProblem(option.response, hasChildren ? 'Mensagem da próxima etapa' : 'Resposta do botão');
+      if (responseProblem) return responseProblem;
+    }
+
+    const childProblem = validateOptionsTree(option.options || [], depth + 1, state);
+    if (childProblem) return childProblem;
+  }
+
+  return null;
+}
+
+function pathArray(path) {
+  return Array.isArray(path) ? path : [path];
+}
+
+function updateOptionTree(options = [], path, updater) {
+  const indexes = pathArray(path);
+  const [currentIndex, ...rest] = indexes;
+
+  return options.map((option, index) => {
+    if (index !== currentIndex) return option;
+    if (!rest.length) return updater(option);
+    return { ...option, options: updateOptionTree(option.options || [], rest, updater) };
+  });
+}
+
+function addChildOptionToTree(options = [], path) {
+  return updateOptionTree(options, path, (option) => {
+    const children = Array.isArray(option.options) ? option.options : [];
+    if (children.length >= MAX_OPTIONS) return option;
+    return { ...option, actionType: 'flow', linkUrl: '', options: [...children, defaultOption(children.length)] };
+  });
+}
+
+function removeOptionFromTree(options = [], path) {
+  const indexes = pathArray(path);
+  const [currentIndex, ...rest] = indexes;
+
+  if (!rest.length) {
+    return options.filter((_, index) => index !== currentIndex);
+  }
+
+  return options.map((option, index) => {
+    if (index !== currentIndex) return option;
+    return { ...option, options: removeOptionFromTree(option.options || [], rest) };
+  });
 }
 
 function createFormFromTemplate(template = triggerTemplates[0]) {
@@ -846,15 +962,7 @@ function App() {
   }
 
   function cleanOptions(options) {
-    return (options || [])
-      .slice(0, MAX_OPTIONS)
-      .map((option) => ({
-        label: String(option.label || '').trim().slice(0, 20),
-        response: String(option.response || '').trim(),
-        linkLabel: String(option.linkLabel || option.link_label || 'Acessar agora').trim(),
-        linkUrl: String(option.linkUrl || option.link_url || '').trim()
-      }))
-      .filter((option) => option.label && (option.response || option.linkUrl) && !isPlaceholderOption(option));
+    return cleanFlowOptions(options);
   }
 
   async function saveRule() {
@@ -866,7 +974,7 @@ function App() {
     const keyword = isWelcomeTrigger ? normalizeKeyword(form.keyword || 'boas vindas') : normalizeKeyword(form.keyword);
 
     if (!normalizedOptions.length) {
-      alert('Adicione pelo menos um botão com mensagem ou link.');
+      alert('Adicione pelo menos um botão com mensagem, link ou próximas opções.');
       return;
     }
 
@@ -878,23 +986,10 @@ function App() {
       alert(messageProblem);
       return;
     }
-    for (const option of normalizedOptions) {
-      const labelProblem = automationTextProblem(option.label, 'Texto do botão');
-      if (labelProblem) {
-        alert(labelProblem);
-        return;
-      }
-      if (!option.response && !option.linkUrl) {
-        alert('Cada opção precisa ter uma resposta, um link, ou os dois.');
-        return;
-      }
-      if (option.response) {
-        const responseProblem = automationTextProblem(option.response, 'Resposta do botão');
-        if (responseProblem) {
-          alert(responseProblem);
-          return;
-        }
-      }
+    const optionsProblem = validateOptionsTree(normalizedOptions);
+    if (optionsProblem) {
+      alert(optionsProblem);
+      return;
     }
     if (!isWelcomeTrigger && selectedPublicationMode === 'single' && !selectedPublicationUrl) {
       alert('Cole o link da publicação antes de salvar.');
@@ -956,13 +1051,7 @@ function App() {
       publicationUrl: rule.publicationUrl || rule.publication_url || '',
       active: rule.active !== 0 && rule.active !== false,
       options: Array.isArray(rule.options) && rule.options.length
-        ? rule.options.slice(0, MAX_OPTIONS).map((option, index) => ({
-          label: option.label || `Botão ${index + 1}`,
-          actionType: option.actionType || option.action_type || (option.linkUrl || option.link_url ? (option.response ? 'both' : 'link') : 'response'),
-          response: option.response || '',
-          linkLabel: option.linkLabel || option.link_label || 'Acessar agora',
-          linkUrl: option.linkUrl || option.link_url || ''
-        }))
+        ? rule.options.slice(0, MAX_OPTIONS).map((option, index) => prepareOptionForForm(option, index))
         : [defaultOption(0)]
     });
     goToView('automacao');
@@ -1076,22 +1165,24 @@ function App() {
     setForm(createFormFromTemplate(template));
   }
 
-  function updateOption(index, field, value) {
+  function updateOption(path, field, value) {
     setForm((prev) => ({
       ...prev,
-      options: prev.options.map((option, optionIndex) =>
-        optionIndex === index ? { ...option, [field]: value } : option
-      )
+      options: updateOptionTree(prev.options, path, (option) => ({ ...option, [field]: value }))
     }));
   }
 
-  function updateOptionAction(index, value) {
+  function updateOptionAction(path, value) {
     setForm((prev) => ({
       ...prev,
-      options: prev.options.map((option, optionIndex) => {
-        if (optionIndex !== index) return option;
-        if (value === 'link') return { ...option, actionType: value, response: '' };
-        if (value === 'response') return { ...option, actionType: value, linkUrl: '' };
+      options: updateOptionTree(prev.options, path, (option) => {
+        if (value === 'link') return { ...option, actionType: value, response: '', options: [] };
+        if (value === 'response') return { ...option, actionType: value, linkUrl: '', options: [] };
+        if (value === 'both') return { ...option, actionType: value, options: [] };
+        if (value === 'flow') {
+          const children = Array.isArray(option.options) && option.options.length ? option.options : [defaultOption(0)];
+          return { ...option, actionType: value, linkUrl: '', options: children };
+        }
         return { ...option, actionType: value };
       })
     }));
@@ -1104,11 +1195,19 @@ function App() {
     });
   }
 
-  function removeOption(index) {
+  function addChildOption(path) {
     setForm((prev) => ({
       ...prev,
-      options: prev.options.filter((_, optionIndex) => optionIndex !== index)
+      options: addChildOptionToTree(prev.options, path)
     }));
+  }
+
+  function removeOption(path) {
+    setForm((prev) => {
+      const indexes = pathArray(path);
+      if (indexes.length === 1 && prev.options.length <= 1) return prev;
+      return { ...prev, options: removeOptionFromTree(prev.options, indexes) };
+    });
   }
 
   function cancelEdit() {
@@ -1130,6 +1229,62 @@ function App() {
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, [cameFromInstagram, user?.id]);
+
+
+  function renderOptionEditor(option, path, depth = 0) {
+    const actionType = optionActionType(option);
+    const showResponse = actionType === 'response' || actionType === 'both' || actionType === 'flow';
+    const showLink = actionType === 'link' || actionType === 'both';
+    const children = Array.isArray(option.options) ? option.options : [];
+    const index = path[path.length - 1];
+    const canAddChild = children.length < MAX_OPTIONS && depth + 1 < MAX_FLOW_DEPTH;
+    const canRemove = !(path.length === 1 && form.options.length <= 1);
+    const title = depth === 0 ? `Botão ${index + 1}` : `Opção ${index + 1} da próxima etapa`;
+
+    return (
+      <div className={depth === 0 ? 'cleanOptionCard compactOptionCard' : 'cleanOptionCard compactOptionCard nestedOptionCard'} key={`option-${path.join('-')}`}>
+        <div className="cleanOptionHeader">
+          <strong>{title}</strong>
+          <button type="button" className="iconGhost" onClick={() => removeOption(path)} disabled={!canRemove}><Trash2 size={15} /></button>
+        </div>
+
+        <label>Nome do botão<input placeholder="Ex: Quero o link" value={option.label} onChange={(e) => updateOption(path, 'label', e.target.value)} maxLength={20} /></label>
+
+        <div className="actionChoiceBlock">
+          <strong>Depois do clique</strong>
+          <div className="actionChoiceRow">
+            <button type="button" className={actionType === 'response' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(path, 'response')}>Mensagem</button>
+            <button type="button" className={actionType === 'link' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(path, 'link')}>Link</button>
+            <button type="button" className={actionType === 'both' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(path, 'both')}>Os dois</button>
+            <button type="button" className={actionType === 'flow' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(path, 'flow')}>Próximas opções</button>
+          </div>
+        </div>
+
+        {showResponse && (
+          <label>{actionType === 'flow' ? 'Mensagem antes dos próximos botões' : 'Mensagem que vai enviar'}<textarea placeholder="Ex: Perfeito! Escolha o próximo passo." value={option.response} onChange={(e) => updateOption(path, 'response', e.target.value)} /></label>
+        )}
+
+        {showLink && (
+          <div className="optionLinkGrid">
+            <label>Nome do link<input placeholder="Ex: Acessar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(path, 'linkLabel', e.target.value)} /></label>
+            <label>Link<input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(path, 'linkUrl', e.target.value)} /></label>
+          </div>
+        )}
+
+        {actionType === 'flow' && (
+          <div className="nestedOptionsBlock">
+            <div className="optionSummary nestedSummary">
+              <strong>Próximos botões</strong>
+              <small>{children.length}/{MAX_OPTIONS}</small>
+            </div>
+            {children.map((child, childIndex) => renderOptionEditor(child, [...path, childIndex], depth + 1))}
+            <button type="button" className="wide ghost addButtonSimple" onClick={() => addChildOption(path)} disabled={!canAddChild}><Plus size={18} /> Adicionar opção da próxima etapa</button>
+            {!canAddChild && <small className="buttonLimitNote">Limite desta etapa atingido.</small>}
+          </div>
+        )}
+      </div>
+    );
+  }
 
   if (checkingSession) {
     return (
@@ -1279,41 +1434,7 @@ function App() {
               </div>
 
               <div className="cleanOptionsList">
-                {form.options.map((option, index) => {
-                  const actionType = option.actionType || (option.linkUrl && option.response ? 'both' : option.linkUrl ? 'link' : 'response');
-                  const showResponse = actionType === 'response' || actionType === 'both';
-                  const showLink = actionType === 'link' || actionType === 'both';
-                  return (
-                    <div className="cleanOptionCard compactOptionCard" key={`option-${index}`}>
-                      <div className="cleanOptionHeader">
-                        <strong>Botão {index + 1}</strong>
-                        <button type="button" className="iconGhost" onClick={() => removeOption(index)} disabled={form.options.length <= 1}><Trash2 size={15} /></button>
-                      </div>
-
-                      <label>Nome do botão<input placeholder="Ex: Quero o link" value={option.label} onChange={(e) => updateOption(index, 'label', e.target.value)} maxLength={20} /></label>
-
-                      <div className="actionChoiceBlock">
-                        <strong>Depois do clique</strong>
-                        <div className="actionChoiceRow">
-                          <button type="button" className={actionType === 'response' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(index, 'response')}>Mensagem</button>
-                          <button type="button" className={actionType === 'link' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(index, 'link')}>Link</button>
-                          <button type="button" className={actionType === 'both' ? 'actionChoice active' : 'actionChoice'} onClick={() => updateOptionAction(index, 'both')}>Os dois</button>
-                        </div>
-                      </div>
-
-                      {showResponse && (
-                        <label>Mensagem que vai enviar<textarea placeholder="Ex: Perfeito! Vou te explicar agora." value={option.response} onChange={(e) => updateOption(index, 'response', e.target.value)} /></label>
-                      )}
-
-                      {showLink && (
-                        <div className="optionLinkGrid">
-                          <label>Nome do link<input placeholder="Ex: Acessar agora" value={option.linkLabel || ''} onChange={(e) => updateOption(index, 'linkLabel', e.target.value)} /></label>
-                          <label>Link<input placeholder="https://..." value={option.linkUrl || ''} onChange={(e) => updateOption(index, 'linkUrl', e.target.value)} /></label>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
+                {form.options.map((option, index) => renderOptionEditor(option, [index], 0))}
               </div>
 
               <button type="button" className="wide ghost addButtonSimple" onClick={addOption} disabled={form.options.length >= MAX_OPTIONS}><Plus size={18} /> Adicionar botão</button>
@@ -1338,6 +1459,9 @@ function App() {
                 <div className="bubble botBubble smallBubble">
                   <p>{form.options[0]?.response || (form.options[0]?.linkUrl ? 'Toque no botão abaixo para acessar.' : 'Aqui aparece a resposta desse botão.')}</p>
                   {form.options[0]?.linkUrl && <button type="button">{form.options[0]?.linkLabel || 'Acessar agora'}</button>}
+                  {Array.isArray(form.options[0]?.options) && form.options[0].options.map((child, childIndex) => (
+                    <button type="button" key={`preview-child-${childIndex}`}>{child.label || `Opção ${childIndex + 1}`}</button>
+                  ))}
                 </div>
               </div>
 
