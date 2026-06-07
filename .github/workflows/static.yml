@@ -28,24 +28,18 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-
-      - name: Clean npm cache
-        run: npm cache clean --force
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
 
       - name: Install dependencies
-        run: |
-          if [ -f package-lock.json ]; then
-            npm ci --no-audit --no-fund
-          else
-            npm install --no-audit --no-fund
-          fi
+        run: npm ci --no-audit --no-fund
 
       - name: Build
         run: npm run build
         env:
           VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL }}
-          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || '/go-viral-frontend/' }}
+          VITE_BASE_PATH: ${{ vars.VITE_BASE_PATH || './' }}
 
       - name: Setup Pages
         uses: actions/configure-pages@v5
