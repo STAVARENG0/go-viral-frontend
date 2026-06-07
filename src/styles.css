@@ -891,6 +891,7 @@ body,
 }
 
 .grid.cards.twoCards,
+.grid.cards.capacityCards,
 .tabPanel,
 .billingPanel,
 .affiliatePanel,
@@ -1038,6 +1039,7 @@ body::-webkit-scrollbar,
 }
 
 .grid.cards.twoCards,
+.grid.cards.capacityCards,
 .tabPanel,
 .billingPanel,
 .affiliatePanel,
@@ -1117,4 +1119,111 @@ body::-webkit-scrollbar,
 
 .actionChoiceRow {
   flex-wrap: wrap;
+}
+
+
+.grid.cards.capacityCards {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+@media (max-width: 980px) {
+  .grid.cards.capacityCards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .grid.cards.capacityCards {
+    grid-template-columns: 1fr;
+  }
+}
+
+.usagePanel {
+  display: grid;
+  gap: 18px;
+  border-radius: 26px;
+}
+
+.usagePanel.warning,
+.usagePanel.pause,
+.usagePanel.cuidado,
+.usagePanel.meta_pausado,
+.usagePanel.plano_pausado {
+  border-color: rgba(230, 0, 0, .24);
+}
+
+.usageGrid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.usageCard {
+  display: grid;
+  gap: 6px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgba(255,255,255,.72);
+}
+
+.usageCard small,
+.usageCard span,
+.usageDetails,
+.usageAccount span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.usageCard strong {
+  font-size: 22px;
+  letter-spacing: -.03em;
+}
+
+.usageProgress {
+  height: 12px;
+  overflow: hidden;
+  border-radius: 999px;
+  border: 1px solid rgba(17,17,17,.1);
+  background: rgba(17,17,17,.06);
+}
+
+.usageProgress span {
+  display: block;
+  height: 100%;
+  min-width: 2px;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--red), var(--red-2));
+}
+
+.usageDetails,
+.usageAccounts,
+.usageAccount {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.usageDetails span,
+.usageAccount {
+  border: 1px solid var(--line);
+  background: rgba(255,255,255,.65);
+  border-radius: 999px;
+  padding: 9px 12px;
+}
+
+.usageAccount strong {
+  margin-right: 4px;
+}
+
+@media (max-width: 980px) {
+  .usageGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 640px) {
+  .usageGrid {
+    grid-template-columns: 1fr;
+  }
 }

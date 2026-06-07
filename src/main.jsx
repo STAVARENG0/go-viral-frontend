@@ -32,6 +32,7 @@ import {
 } from 'lucide-react';
 
 const API_BASE = (import.meta.env.VITE_API_BASE_URL || 'https://api.matheus-caetano.com').replace(/\/$/, '');
+const LOGO_URL = `${import.meta.env.BASE_URL || '/'}logo.png`;
 const MAX_OPTIONS = 3;
 const MAX_FLOW_DEPTH = 8;
 const MAX_FLOW_NODES = 60;
@@ -291,7 +292,11 @@ function statusLabel(status) {
     welcome_sent_text: 'Boas-vindas em texto',
     sent_direct_fallback: 'DM enviada por fallback',
     sent_direct_fallback_text: 'DM fallback em texto',
-    error_invalid_private_reply: 'Comentário recusado pela Meta'
+    error_invalid_private_reply: 'Comentário recusado pela Meta',
+    quota_exceeded: 'Limite mensal atingido',
+    meta_usage_paused: 'Meta pausada por segurança',
+    queue_timeout: 'Fila demorou demais',
+    queue_full: 'Fila cheia'
   };
   return map[status] || status || '—';
 }
@@ -300,7 +305,7 @@ function statusIcon(status) {
   if (['sent', 'sent_quick_replies', 'sent_text_fallback', 'dm_flow_sent', 'dm_quick_replies_sent', 'dm_option_sent', 'dm_option_sent_text', 'welcome_sent', 'welcome_sent_quick_replies', 'welcome_sent_text', 'sent_direct_fallback', 'sent_direct_fallback_text'].includes(status)) {
     return <CheckCircle2 size={16} />;
   }
-  if (status === 'error') return <XCircle size={16} />;
+  if (['error', 'error_invalid_private_reply', 'quota_exceeded', 'meta_usage_paused', 'queue_timeout', 'queue_full'].includes(status)) return <XCircle size={16} />;
   return <Activity size={16} />;
 }
 
@@ -525,7 +530,7 @@ function AuthScreen({ onAuthenticated }) {
     <main className="loginPage">
       <section className="loginCard glassCard">
         <div className="loginBrandBlock">
-          <img src="/logo.png" alt="Instagram Go Viral" className="logo" />
+          <img src={LOGO_URL} alt="Instagram Go Viral" className="logo" />
           <span className="eyebrow">Automação para Instagram</span>
           <h1>Go Viral</h1>
           <p>Painel privado para criar automações que seguram o cliente no direct.</p>
@@ -696,6 +701,148 @@ function BillingPanel({ billing, plans, loading, onChoosePlan }) {
           </article>
         ))}
       </div>
+    </section>
+  );
+}
+
+
+function formatUsageNumber(value) {
+  const number = Number(value || 0);
+  return Number.isFinite(number) ? number.toLocaleString('pt-BR') : '0';
+}
+
+function formatUsageLimit(value) {
+  if (value === null || value === undefined || Number(value) >= 2147483647) return 'liberado';
+  return formatUsageNumber(value);
+}
+
+function formatUsagePercent(value) {
+  if (value === null || value === undefined || Number.isNaN(Number(value))) return '—';
+  return `${Math.max(0, Math.min(100, Math.round(Number(value))))}%`;
+}
+
+function usageStatusText(status) {
+  const map = {
+    ok: 'Normal',
+    normal: 'Normal',
+    warning: 'Atenção',
+    cuidado: 'Atenção',
+    pause: 'Pausado',
+    plano_pausado: 'Limite do plano atingido',
+    meta_pausado: 'Meta pausada por segurança'
+  };
+  return map[status] || status || 'Normal';
+}
+
+function normalizeUsageSummary(usage = {}) {
+  const legacyTotals = usage?.totals || {};
+  const accounts = Array.isArray(usage?.accounts) ? usage.accounts : [];
+  const interactionLimit = usage?.interactionLimit ?? (legacyTotals.unlimited ? null : legacyTotals.limit ?? null);
+  const interactionsUsed = Number(usage?.interactionsUsed ?? legacyTotals.used ?? 0);
+  const interactionsPercent = Number(usage?.interactionsPercent ?? legacyTotals.percent ?? 0);
+  const interactionsRemaining = usage?.interactionsRemaining ?? (
+    interactionLimit === null || interactionLimit === undefined ? null : Math.max(0, Number(interactionLimit) - interactionsUsed)
+  );
+  const metaPercent = accounts.reduce((max, account) => Math.max(max, Number(account.metaUsagePercent ?? account.usage?.meta?.percent ?? 0)), Number(legacyTotals.meta?.percent || 0));
+  const queuePending = accounts.reduce((sum, account) => sum + Number(account.usage?.queue?.pending || 0), Number(legacyTotals.queue?.pending || 0));
+  const status = metaPercent >= Number(usage?.thresholds?.pausePercent || 90)
+    ? 'pause'
+    : metaPercent >= Number(usage?.thresholds?.warningPercent || 70)
+      ? 'warning'
+      : legacyTotals.status || 'ok';
+
+  return {
+    accounts,
+    interactionLimit,
+    interactionsUsed,
+    interactionsPercent: Math.max(0, Math.min(100, interactionsPercent)),
+    interactionsRemaining,
+    metaPercent,
+    queuePending,
+    status,
+    hourlySoftLimit: usage?.hourlySoftLimit ?? legacyTotals.hourlySoftLimit ?? null,
+    monthKey: usage?.monthKey || usage?.periodKey || 'mês atual',
+    resetAt: usage?.resetAt || null,
+    planId: usage?.planId || null,
+    enforced: usage?.enforced,
+    allowed: usage?.allowed,
+    legacyTotals
+  };
+}
+
+function UsagePanel({ usage, loading, onRefresh }) {
+  const summary = normalizeUsageSummary(usage);
+  const limitLabel = formatUsageLimit(summary.interactionLimit);
+  const usedLabel = formatUsageNumber(summary.interactionsUsed);
+  const remainingLabel = summary.interactionsRemaining === null || summary.interactionsRemaining === undefined
+    ? 'liberado'
+    : formatUsageNumber(summary.interactionsRemaining);
+
+  return (
+    <section className={`panel usagePanel ${summary.status || 'ok'}`}>
+      <div className="panelHeader">
+        <div>
+          <h2><ShieldCheck size={20} /> Capacidade e segurança</h2>
+          <p>Controle mensal do plano, limite seguro por Instagram e porcentagem mais recente informada pela Meta.</p>
+        </div>
+        <button type="button" className="small ghost" onClick={onRefresh} disabled={loading}>
+          {loading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} Atualizar
+        </button>
+      </div>
+
+      <div className="usageGrid">
+        <div className="usageCard">
+          <small>Interações do mês</small>
+          <strong>{usedLabel} / {limitLabel}</strong>
+          <span>{summary.monthKey}{summary.resetAt ? ` · zera em ${formatDate(summary.resetAt)}` : ''}</span>
+        </div>
+        <div className="usageCard">
+          <small>Restante no plano</small>
+          <strong>{remainingLabel}</strong>
+          <span>{formatUsagePercent(summary.interactionsPercent)} usado</span>
+        </div>
+        <div className="usageCard">
+          <small>Meta API</small>
+          <strong>{formatUsagePercent(summary.metaPercent)}</strong>
+          <span>{usageStatusText(summary.status)}</span>
+        </div>
+        <div className="usageCard">
+          <small>Limite seguro por hora</small>
+          <strong>{summary.hourlySoftLimit ? formatUsageNumber(summary.hourlySoftLimit) : '—'}</strong>
+          <span>por Instagram conectado</span>
+        </div>
+      </div>
+
+      {summary.interactionLimit !== null && summary.interactionLimit !== undefined && (
+        <div className="usageProgress" aria-label={`Uso mensal ${formatUsagePercent(summary.interactionsPercent)}`}>
+          <span style={{ width: `${summary.interactionsPercent}%` }} />
+        </div>
+      )}
+
+      <div className="usageDetails">
+        <span>Status do acesso: {summary.allowed === false ? 'bloqueado' : 'liberado'}</span>
+        <span>Cobrança ativa: {summary.enforced ? 'sim' : 'não'}</span>
+        <span>Fila atual: {formatUsageNumber(summary.queuePending)}</span>
+        <span>Contas conectadas: {summary.accounts.length}</span>
+      </div>
+
+      {summary.accounts.length > 0 && (
+        <div className="usageAccounts">
+          {summary.accounts.map((item) => {
+            const currentHour = Number(item.currentHourSent ?? item.usage?.used ?? 0);
+            const hourlyLimit = item.hourlySoftLimit ?? summary.hourlySoftLimit;
+            const metaPercent = item.metaUsagePercent ?? item.usage?.meta?.percent ?? null;
+            return (
+              <div className={`usageAccount ${item.status || 'ok'}`} key={item.id || item.accountId || item.instagramUserId}>
+                <strong>@{item.username || 'instagram'}</strong>
+                <span>{formatUsageNumber(currentHour)}{hourlyLimit ? `/${formatUsageNumber(hourlyLimit)}` : ''} nesta hora</span>
+                <span>Meta {formatUsagePercent(metaPercent)}</span>
+                <span>{usageStatusText(item.status)}</span>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
@@ -888,6 +1035,7 @@ function App() {
   const [billing, setBilling] = useState(null);
   const [plans, setPlans] = useState([]);
   const [affiliate, setAffiliate] = useState(null);
+  const [usage, setUsage] = useState(null);
   const [checkoutPlan, setCheckoutPlan] = useState(null);
   const [loading, setLoading] = useState(false);
   const [editingRuleId, setEditingRuleId] = useState(null);
@@ -901,6 +1049,7 @@ function App() {
   );
   const mainAccount = accounts[0] || null;
   const activeRules = rules.filter((rule) => rule.active !== 0 && rule.active !== false);
+  const usageSummary = normalizeUsageSummary(usage || {});
 
   function goToView(viewId) {
     const view = APP_VIEWS.find((item) => item.id === viewId) || APP_VIEWS[0];
@@ -948,6 +1097,7 @@ function App() {
       setBilling(billingData || null);
       setPlans(Array.isArray(billingData?.plans) ? billingData.plans : []);
       setAffiliate(billingData?.affiliate || null);
+      setUsage(billingData?.usage || null);
     } catch (err) {
       console.error(err);
       if (/sessão|unauthorized|expirada/i.test(err.message)) {
@@ -1157,6 +1307,7 @@ function App() {
     setBilling(null);
     setPlans([]);
     setAffiliate(null);
+    setUsage(null);
     setCheckoutPlan(null);
   }
 
@@ -1291,7 +1442,7 @@ function App() {
       <main className="loginPage">
         <section className="loginCard glassCard">
           <div className="loginBrandBlock">
-            <img src="/logo.png" alt="Instagram Go Viral" className="logo" />
+            <img src={LOGO_URL} alt="Instagram Go Viral" className="logo" />
             <h1>Go Viral</h1>
             <p>Carregando sessão segura...</p>
           </div>
@@ -1309,7 +1460,7 @@ function App() {
       <section className="siteFrame">
         <header className="siteHeader">
           <div className="brandTop">
-            <img src="/logo.png" alt="Instagram Go Viral" className="brandLogoSmall" />
+            <img src={LOGO_URL} alt="Instagram Go Viral" className="brandLogoSmall" />
             <div className="brandText">
               <h1>Go Viral</h1>
               <p>Automação para Instagram</p>
@@ -1360,10 +1511,14 @@ function App() {
           </div>
         </section>
 
-        {activeView === 'automacao' && <div className="grid cards twoCards">
+        {activeView === 'automacao' && <div className="grid cards capacityCards">
           <div className="metricCard"><Bot /><strong>{activeRules.length}</strong><span>Automações ativas</span></div>
           <div className="metricCard"><MessageCircle /><strong>{logs.length}</strong><span>Chamadas registradas</span></div>
+          <div className="metricCard"><ShieldCheck /><strong>{formatUsagePercent(usageSummary.interactionsPercent)}</strong><span>Uso do plano</span></div>
+          <div className="metricCard"><Activity /><strong>{formatUsagePercent(usageSummary.metaPercent)}</strong><span>Uso Meta API</span></div>
         </div>}
+
+        {activeView === 'automacao' && usage && <UsagePanel usage={usage} loading={loading} onRefresh={loadData} />}
 
         <section className="mentalPanel tabPanel" id="caminho" hidden={activeView !== 'automacao'}>
           <div className="panelHeader">
