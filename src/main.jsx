@@ -743,13 +743,7 @@ function normalizeUsageSummary(usage = {}) {
   const interactionsRemaining = usage?.interactionsRemaining ?? (
     interactionLimit === null || interactionLimit === undefined ? null : Math.max(0, Number(interactionLimit) - interactionsUsed)
   );
-  const metaPercent = accounts.reduce((max, account) => Math.max(max, Number(account.metaUsagePercent ?? account.usage?.meta?.percent ?? 0)), Number(legacyTotals.meta?.percent || 0));
-  const queuePending = accounts.reduce((sum, account) => sum + Number(account.usage?.queue?.pending || 0), Number(legacyTotals.queue?.pending || 0));
-  const status = metaPercent >= Number(usage?.thresholds?.pausePercent || 90)
-    ? 'pause'
-    : metaPercent >= Number(usage?.thresholds?.warningPercent || 70)
-      ? 'warning'
-      : legacyTotals.status || 'ok';
+  const status = legacyTotals.status || (interactionsPercent >= 80 ? 'cuidado' : 'ok');
 
   return {
     accounts,
@@ -757,10 +751,10 @@ function normalizeUsageSummary(usage = {}) {
     interactionsUsed,
     interactionsPercent: Math.max(0, Math.min(100, interactionsPercent)),
     interactionsRemaining,
-    metaPercent,
-    queuePending,
+    metaPercent: 0,
+    queuePending: 0,
     status,
-    hourlySoftLimit: usage?.hourlySoftLimit ?? legacyTotals.hourlySoftLimit ?? null,
+    hourlySoftLimit: null,
     monthKey: usage?.monthKey || usage?.periodKey || 'mês atual',
     resetAt: usage?.resetAt || null,
     planId: usage?.planId || null,
@@ -782,8 +776,8 @@ function UsagePanel({ usage, loading, onRefresh }) {
     <section className={`panel usagePanel ${summary.status || 'ok'}`}>
       <div className="panelHeader">
         <div>
-          <h2><ShieldCheck size={20} /> Capacidade e segurança</h2>
-          <p>Controle mensal do plano, limite seguro por Instagram e porcentagem mais recente informada pela Meta.</p>
+          <h2><ShieldCheck size={20} /> Uso do plano</h2>
+          <p>Acompanhe apenas o consumo mensal disponível no seu plano.</p>
         </div>
         <button type="button" className="small ghost" onClick={onRefresh} disabled={loading}>
           {loading ? <Loader2 className="spin" size={16} /> : <RefreshCw size={16} />} Atualizar
@@ -802,14 +796,14 @@ function UsagePanel({ usage, loading, onRefresh }) {
           <span>{formatUsagePercent(summary.interactionsPercent)} usado</span>
         </div>
         <div className="usageCard">
-          <small>Meta API</small>
-          <strong>{formatUsagePercent(summary.metaPercent)}</strong>
+          <small>Uso do plano</small>
+          <strong>{formatUsagePercent(summary.interactionsPercent)}</strong>
           <span>{usageStatusText(summary.status)}</span>
         </div>
         <div className="usageCard">
-          <small>Limite seguro por hora</small>
-          <strong>{summary.hourlySoftLimit ? formatUsageNumber(summary.hourlySoftLimit) : '—'}</strong>
-          <span>por Instagram conectado</span>
+          <small>Contas conectadas</small>
+          <strong>{formatUsageNumber(summary.accounts.length)}</strong>
+          <span>Instagram conectado</span>
         </div>
       </div>
 
@@ -821,26 +815,17 @@ function UsagePanel({ usage, loading, onRefresh }) {
 
       <div className="usageDetails">
         <span>Status do acesso: {summary.allowed === false ? 'bloqueado' : 'liberado'}</span>
-        <span>Cobrança ativa: {summary.enforced ? 'sim' : 'não'}</span>
-        <span>Fila atual: {formatUsageNumber(summary.queuePending)}</span>
         <span>Contas conectadas: {summary.accounts.length}</span>
       </div>
 
       {summary.accounts.length > 0 && (
         <div className="usageAccounts">
-          {summary.accounts.map((item) => {
-            const currentHour = Number(item.currentHourSent ?? item.usage?.used ?? 0);
-            const hourlyLimit = item.hourlySoftLimit ?? summary.hourlySoftLimit;
-            const metaPercent = item.metaUsagePercent ?? item.usage?.meta?.percent ?? null;
-            return (
-              <div className={`usageAccount ${item.status || 'ok'}`} key={item.id || item.accountId || item.instagramUserId}>
-                <strong>@{item.username || 'instagram'}</strong>
-                <span>{formatUsageNumber(currentHour)}{hourlyLimit ? `/${formatUsageNumber(hourlyLimit)}` : ''} nesta hora</span>
-                <span>Meta {formatUsagePercent(metaPercent)}</span>
-                <span>{usageStatusText(item.status)}</span>
-              </div>
-            );
-          })}
+          {summary.accounts.map((item) => (
+            <div className="usageAccount ok" key={item.id || item.accountId || item.instagramUserId}>
+              <strong>@{item.username || 'instagram'}</strong>
+              <span>Conectado</span>
+            </div>
+          ))}
         </div>
       )}
     </section>
@@ -1515,7 +1500,7 @@ function App() {
           <div className="metricCard"><Bot /><strong>{activeRules.length}</strong><span>Automações ativas</span></div>
           <div className="metricCard"><MessageCircle /><strong>{logs.length}</strong><span>Chamadas registradas</span></div>
           <div className="metricCard"><ShieldCheck /><strong>{formatUsagePercent(usageSummary.interactionsPercent)}</strong><span>Uso do plano</span></div>
-          <div className="metricCard"><Activity /><strong>{formatUsagePercent(usageSummary.metaPercent)}</strong><span>Uso Meta API</span></div>
+          <div className="metricCard"><Activity /><strong>{usageSummary.interactionsRemaining === null || usageSummary.interactionsRemaining === undefined ? '∞' : formatUsageNumber(usageSummary.interactionsRemaining)}</strong><span>Restante no plano</span></div>
         </div>}
 
         {activeView === 'automacao' && usage && <UsagePanel usage={usage} loading={loading} onRefresh={loadData} />}
