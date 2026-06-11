@@ -1196,7 +1196,10 @@ function App() {
     if (!confirm('Excluir esta automação?')) return;
     setLoading(true);
     try {
-      await apiFetch(`/api/rules/${id}`, { method: 'DELETE' });
+      await apiFetch(`/api/rules/${id}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ confirm: true })
+      });
       if (editingRuleId === id) {
         setEditingRuleId(null);
         setForm(createFormFromTemplate(selectedTemplate));
@@ -1220,7 +1223,10 @@ function App() {
 
     setLoading(true);
     try {
-      await apiFetch(`/api/accounts/${mainAccount.id}`, { method: 'DELETE' });
+      await apiFetch(`/api/accounts/${mainAccount.id}`, {
+        method: 'DELETE',
+        body: JSON.stringify({ confirm: true })
+      });
       setAccounts([]);
       setRules([]);
       setLogs([]);
@@ -1236,7 +1242,10 @@ function App() {
     if (!confirm('Apagar todo o registro de atividades desta conta?')) return;
     setLoading(true);
     try {
-      await apiFetch('/api/logs', { method: 'DELETE' });
+      await apiFetch('/api/logs', {
+        method: 'DELETE',
+        body: JSON.stringify({ confirm: true })
+      });
       setLogs([]);
       alert('Registro de atividades apagado.');
       await loadData();
@@ -1281,7 +1290,10 @@ function App() {
 
   async function logout() {
     try {
-      await apiFetch('/api/logout', { method: 'POST' });
+      await apiFetch('/api/logout', {
+        method: 'POST',
+        body: JSON.stringify({})
+      });
     } catch {
       // Mesmo se a sessão já expirou, limpamos a interface.
     }
