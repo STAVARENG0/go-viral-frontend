@@ -292,9 +292,9 @@ function statusLabel(status) {
     welcome_sent_text: 'Boas-vindas em texto',
     sent_direct_fallback: 'DM enviada por fallback',
     sent_direct_fallback_text: 'DM fallback em texto',
-    error_invalid_private_reply: 'Comentário recusado pela Meta',
+    error_invalid_private_reply: 'Comentário recusado pela plataforma',
     quota_exceeded: 'Limite mensal atingido',
-    meta_usage_paused: 'Meta pausada por segurança',
+    meta_usage_paused: 'Envio pausado por segurança',
     queue_timeout: 'Fila demorou demais',
     queue_full: 'Fila cheia'
   };
@@ -729,7 +729,7 @@ function usageStatusText(status) {
     cuidado: 'Atenção',
     pause: 'Pausado',
     plano_pausado: 'Limite do plano atingido',
-    meta_pausado: 'Meta pausada por segurança'
+    meta_pausado: 'Envio pausado por segurança'
   };
   return map[status] || status || 'Normal';
 }
